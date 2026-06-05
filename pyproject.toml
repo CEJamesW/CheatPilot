@@ -1,0 +1,19 @@
+[project]
+name = "cheatpilot"
+version = "0.1.0"
+description = "CheatPilot: LLM-driven real-time memory modification agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.8.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.scripts]
+cheatpilot = "cheatpilot.__main__:main"
+cheatpilot-ui = "cheatpilot.ui:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
