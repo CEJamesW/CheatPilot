@@ -1,211 +1,164 @@
-# CheatPilot
+# CheatPilot：由 LLM 驱动的实时内存修改系统
 
-**CheatPilot: LLM-driven real-time memory modification system**
+CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普通语言描述目标进程、当前数值和期望结果，系统由 LLM 规划工具调用，并通过 Cheat Engine MCP 执行进程附加、内存扫描、结果筛选、数值写入和地址输出等操作。
 
-CheatPilot turns natural-language requests into real Cheat Engine MCP actions. The main product path is:
+本项目面向课程设计、实验演示和受控环境下的自动化内存分析研究。
 
-```text
-User message -> LLM tool calls -> CheatPilot tools -> Cheat Engine MCP -> Cheat Engine Lua bridge -> target process
-```
+## 项目目标
 
-There is no mock executor in product code. CLI, API, and the desktop window all use the dedicated Cheat Engine MCP runtime in this project.
+用自然语言对话，让 AI 自动完成实时内存修改流程。
 
-## Main Workflow
+典型流程包括：
 
-Start from a sentence that names the target process, current value, desired value, and optional address output:
+1. 用户描述目标程序和当前数值。
+2. LLM 判断意图并选择工具。
+3. CheatPilot 调用 Cheat Engine MCP 附加目标进程。
+4. 系统扫描当前数值并保存候选地址。
+5. 如果候选地址不唯一，Agent 引导用户改变数值并继续筛选。
+6. 找到唯一地址后写入目标值，并返回执行结果和地址信息。
 
-```text
-打开 game.exe，当前金币是150，帮我改成99999，并打印基址
-```
+## 核心能力
 
-CheatPilot will:
+- 自然语言对话式控制
+- LLM tool calling 工具规划
+- Cheat Engine MCP 后端执行
+- 进程附加与校验
+- 精确数值扫描与 next scan 筛选
+- 多轮扫描会话状态保存
+- 唯一候选地址写入
+- 地址/基址信息输出
+- CLI、API、桌面 UI 三种入口
 
-1. Attach Cheat Engine to the target process.
-2. Scan the current value as a `dword`.
-3. If there are multiple candidates, save the pending write and base-address request.
-4. Ask you to change that value in the target program.
-5. When you reply with the new value, for example `现在金币是50了`, run `next_scan`.
-6. Once there is one candidate left, write `99999`, read it back, and print the address/base address.
-
-PVZ is just a real test target:
-
-```text
-我在玩植物大战僵尸，现在的阳光是150。帮我把阳光修改成99999，并打印出阳光基址
-```
-
-Useful follow-up commands:
+## 系统架构
 
 ```text
-现在阳光是50了
-查看阳光扫描状态
-重新开始
+用户输入
+  -> LLM Agent
+  -> 工具调用计划
+  -> CheatPilot Executor
+  -> Cheat Engine MCP
+  -> Cheat Engine Lua Bridge
+  -> 目标进程内存
 ```
 
-## First Run
+主要模块：
 
-Bootstrap the dedicated CheatPilot MCP runtime:
+- `cheatpilot/tool_agent.py`：LLM tool-use Agent
+- `cheatpilot/executors/ce_mcp.py`：Cheat Engine MCP 执行器
+- `cheatpilot/mcp_client.py`：MCP stdio 客户端
+- `cheatpilot/api.py`：FastAPI 服务入口
+- `cheatpilot/ui.py`：桌面聊天窗口
+- `runtime/ce_mcp/`：项目内置 Cheat Engine MCP 运行文件
+- `scripts/`：启动、检查和初始化脚本
+
+## 环境要求
+
+- Python 3.11 或更高版本
+- Cheat Engine
+- Cheat Engine MCP Bridge
+- 支持 OpenAI-compatible Chat Completions 和 tool calling 的 LLM 服务
+
+## 安装
 
 ```powershell
-cd C:\Users\Administrator\Desktop\CheatPilot
+pip install -e .
+```
+
+初始化 Cheat Engine MCP 运行环境：
+
+```powershell
 python scripts\bootstrap_ce_mcp.py
 ```
 
-Then start or restart Cheat Engine. The bootstrap installs:
+## 配置
+
+复制 `.env.example` 为 `.env`，并填写实际配置：
 
 ```text
-C:\Program Files\Cheat Engine\autorun\cheatpilot_mcp_autoload.lua
+CHEATPILOT_LLM_BASE_URL=
+CHEATPILOT_LLM_API_KEY=
+CHEATPILOT_LLM_MODEL=
+CHEATPILOT_PLANNER=llm
+CHEATPILOT_MCP_COMMAND=
+CHEATPILOT_MCP_ARGS=
 ```
 
-If Cheat Engine is already open, run this once inside Cheat Engine:
+常用可选配置：
 
-```lua
-dofile([[C:\Users\Administrator\Desktop\CheatPilot\runtime\ce_mcp\ce_mcp_bridge.lua]])
+```text
+CHEATPILOT_LLM_TIMEOUT_SECONDS=
+CHEATPILOT_LLM_MAX_RETRIES=
+CHEATPILOT_VALUE_TYPE=
+CHEATPILOT_MAX_SCAN_RESULTS=
+CHEATPILOT_ALLOW_LUA=
 ```
 
-## Run CLI
+`.env` 包含私密密钥，不应提交到仓库。
 
-Default LLM tool-use agent:
+## 运行
+
+CLI：
 
 ```powershell
-python -m cheatpilot "我在玩植物大战僵尸，现在的阳光是100。帮我把阳光修改成99999，并打印出阳光基址"
-python -m cheatpilot "hook植物大战僵尸"
-python -m cheatpilot "现在阳光是50了"
-python -m cheatpilot "查看阳光扫描状态"
-python -m cheatpilot "打开 game.exe，当前金币是150，帮我改成99999，并打印基址"
+python -m cheatpilot "你的自然语言指令"
 ```
 
-Short PVZ helper:
-
-```powershell
-.\scripts\cheatpilot_pvz.ps1
-.\scripts\cheatpilot_pvz.ps1 "现在阳光是50了"
-```
-
-Deterministic rule planner:
-
-```powershell
-python -m cheatpilot --planner rule "我在玩植物大战僵尸，现在的阳光是100。帮我把阳光修改成99999，并打印出阳光基址"
-```
-
-Machine-readable output:
-
-```powershell
-python -m cheatpilot --json "查看阳光扫描状态"
-```
-
-## Run Desktop Window
+桌面 UI：
 
 ```powershell
 .\scripts\start_ui.ps1
 ```
 
-The desktop window is a topmost chat surface with no shortcut/action buttons. Every message you type is sent to the LLM first; the LLM then decides whether to answer directly or call CheatPilot tools backed by Cheat Engine MCP.
-
-## Run API
+API：
 
 ```powershell
 .\scripts\start_api.ps1
 ```
 
-Call the chat endpoint:
-
-```powershell
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/chat -ContentType 'application/json' -Body '{"message":"查看阳光扫描状态"}'
-```
-
-API responses include:
-
-- `reply`: compact user-facing text.
-- `plan`: structured actions.
-- `results`: raw action data from CheatPilot and Cheat Engine MCP.
-
-## MCP Check
+健康检查和 MCP 检查：
 
 ```powershell
 python scripts\check_mcp.py
-```
-
-Expected bridge-level success:
-
-```json
-{
-  "success": true,
-  "message": "CE MCP Bridge v11.4.0 alive"
-}
-```
-
-`No process attached` is normal until Cheat Engine attaches to a target process.
-
-## Configuration
-
-Runtime config lives in `.env`:
-
-```text
-CHEATPILOT_LLM_BASE_URL=https://ai.saurlax.com/v1
-CHEATPILOT_LLM_API_KEY=...
-CHEATPILOT_LLM_MODEL=mimo-v2.5-pro
-CHEATPILOT_LLM_TIMEOUT_SECONDS=45
-CHEATPILOT_LLM_MAX_RETRIES=8
-CHEATPILOT_PLANNER=llm
-CHEATPILOT_MCP_COMMAND=D:\MCP\cheatengine-mcp-bridge\.venv\Scripts\python.exe
-CHEATPILOT_MCP_ARGS=C:\Users\Administrator\Desktop\CheatPilot\runtime\ce_mcp\mcp_cheatengine.py
-CHEATPILOT_ALLOW_LUA=0
-CHEATPILOT_VALUE_TYPE=dword
-CHEATPILOT_MAX_SCAN_RESULTS=25
-```
-
-`CHEATPILOT_PLANNER=llm` is the default OpenAI-compatible tool-use agent. Every user message is sent to the model configured by `CHEATPILOT_LLM_MODEL` first. The agent sends tool schemas to the model, executes returned `tool_calls`, feeds tool results back to the model, and displays the model's final reply. Retryable LLM failures such as HTTP 429 are retried inside the same LLM request according to `CHEATPILOT_LLM_MAX_RETRIES`, so Cheat Engine tool actions are not repeated just because the model's final wording was rate-limited. Use `CHEATPILOT_PLANNER=hybrid` for the older local-rule-first JSON planner, `openai` for raw JSON planning, or `rule` for deterministic local parsing.
-
-Check whether the configured LLM supports tool calls:
-
-```powershell
 python scripts\check_llm_tooluse.py
 ```
 
-The configured endpoint has been verified to return OpenAI-compatible `tool_calls`.
+## 使用方式
 
-`CHEATPILOT_ALLOW_LUA=0` disables model-generated Lua actions. CheatPilot's internal process attach still uses controlled Cheat Engine MCP Lua automation.
+用户可以用自然语言描述：
 
-## Open-Source Base
+- 要附加的目标程序
+- 当前可见数值
+- 期望修改后的数值
+- 是否需要输出地址信息
+- 数值变化后的新值
 
-The project is structured so the tool-use layer can be moved onto an open-source agent base later:
+当扫描结果不唯一时，Agent 会要求用户在目标程序中改变该数值，并继续报告变化后的新值。系统会使用多轮扫描逐步缩小候选地址，直到满足写入条件。
 
-- `mcp-use`: closest match when the goal is to connect any LLM to MCP servers and run tool-access agents.
-- OpenAI Agents SDK: good fit if the runtime standardizes on OpenAI-compatible tool/function calling.
-- `smolagents`: lightweight, but code-first agents are less predictable for this memory-modification workflow.
-- LangGraph: powerful for complex graphs, but heavier than this first product needs.
+## 安全边界
 
-Current implementation keeps a small local hybrid planner plus a Cheat Engine MCP executor. That gives stable PVZ/notepad/live-process behavior now while keeping the tool boundary narrow enough to replace with an open-source framework later.
+CheatPilot 仅用于用户授权的本地实验、课程演示和受控测试环境。项目不应被用于未授权软件修改、凭据或密钥提取、授权绕过、持久化控制、隐蔽访问、控制流劫持或其他破坏性行为。
 
-## Session State
+默认产品路径聚焦于数值型内存扫描与写入。高风险能力应在受控实验环境中单独审查和显式开启。
 
-CheatPilot saves scan state in:
-
-```text
-C:\Users\Administrator\Desktop\CheatPilot\runtime\session_state.json
-```
-
-This file lets the agent continue a scan across multiple user messages. Use `重新开始` to clear it before a fresh run.
-
-## Tests
-
-Planner and local behavior tests:
+## 测试
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-Real execution is validated separately with `scripts\check_mcp.py` and live Cheat Engine MCP calls.
+## 项目状态
 
-## Key Files
+当前版本已实现：
 
-- `cheatpilot/planner.py`: LLM and deterministic rule planners.
-- `cheatpilot/tool_agent.py`: OpenAI-compatible LLM tool-use agent.
-- `cheatpilot/agent.py`: natural-language request orchestration.
-- `cheatpilot/executors/ce_mcp.py`: real Cheat Engine MCP executor.
-- `cheatpilot/formatter.py`: shared CLI/API/UI reply formatting.
-- `cheatpilot/api.py`: FastAPI service.
-- `cheatpilot/ui.py`: topmost desktop chat window.
-- `runtime/ce_mcp/mcp_cheatengine.py`: dedicated MCP server.
-- `runtime/ce_mcp/ce_mcp_bridge.lua`: dedicated Cheat Engine Lua bridge.
-- `AGENT.md`: live project progress notes.
+- LLM tool-use Agent
+- Cheat Engine MCP 执行后端
+- 多轮扫描状态管理
+- CLI / API / UI 入口
+- 基础测试覆盖
+
+后续可扩展方向：
+
+- 更稳定的指针链分析
+- 更细粒度的写入保护
+- 更完整的桌面交互体验
+- 更多可观测日志与审计记录
