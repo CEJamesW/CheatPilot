@@ -73,22 +73,55 @@ python scripts\bootstrap_ce_mcp.py
 复制 `.env.example` 为 `.env`，并填写实际配置：
 
 ```env
+# LLM 接口地址，必须填写。
+# 可填写任何 OpenAI-compatible 服务地址。
+# 示例：https://api.openai.com/v1
 CHEATPILOT_LLM_BASE_URL=
+
+# LLM API Key，必须填写。
+# 注意：这是私密密钥，只写入 .env，不要提交到仓库。
 CHEATPILOT_LLM_API_KEY=
+
+# LLM 模型名，必须填写。
+# 要选择支持 chat/completions 和 tool calling 的模型。
+# 示例：gpt-4.1、gpt-4.1-mini、mimo-v2.5-pro，或你的服务商提供的模型名。
 CHEATPILOT_LLM_MODEL=
+
+# Agent 规划模式。
+# 推荐：llm
+# 可选：llm、tool、tooluse、hybrid、openai、rule
 CHEATPILOT_PLANNER=llm
+
+# Cheat Engine MCP Server 的 Python 可执行文件路径，必须填写。
+# 可填写系统 python、虚拟环境 python，或其他能运行 MCP Server 的 Python 路径。
+# Windows 示例：D:\MCP\cheatengine-mcp-bridge\.venv\Scripts\python.exe
 CHEATPILOT_MCP_COMMAND=
+
+# Cheat Engine MCP Server 脚本路径，必须填写。
+# 通常指向 runtime/ce_mcp/mcp_cheatengine.py 或 vendor 中的 MCP Server 脚本。
 CHEATPILOT_MCP_ARGS=
-```
 
-常用可选配置：
+# LLM 单次请求超时时间，单位为秒。
+# 可选，默认建议：45
+CHEATPILOT_LLM_TIMEOUT_SECONDS=45
 
-```env
-CHEATPILOT_LLM_TIMEOUT_SECONDS=
-CHEATPILOT_LLM_MAX_RETRIES=
-CHEATPILOT_VALUE_TYPE=
-CHEATPILOT_MAX_SCAN_RESULTS=
-CHEATPILOT_ALLOW_LUA=
+# LLM 遇到 429、超时等临时错误时的最大重试次数。
+# 可选，默认建议：8
+CHEATPILOT_LLM_MAX_RETRIES=8
+
+# 默认数值类型。
+# 可选：byte、word、dword、qword、float、double
+# 常见游戏整数数值一般使用 dword。
+CHEATPILOT_VALUE_TYPE=dword
+
+# 单次扫描最多保留/展示的候选地址数量。
+# 可选，默认建议：25
+CHEATPILOT_MAX_SCAN_RESULTS=25
+
+# 是否允许 LLM 直接触发额外 Lua 动作。
+# 推荐保持 0。
+# 可选：0、1
+CHEATPILOT_ALLOW_LUA=0
 ```
 
 ## 运行
