@@ -91,8 +91,6 @@ CHEATPILOT_MAX_SCAN_RESULTS=
 CHEATPILOT_ALLOW_LUA=
 ```
 
-`.env` 包含私密密钥，不应提交到仓库。
-
 ## 运行
 
 CLI：
