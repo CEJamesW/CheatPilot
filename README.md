@@ -58,13 +58,13 @@ CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普
 
 ## 安装
 
-```powershell
+```bash
 pip install -e .
 ```
 
 初始化 Cheat Engine MCP 运行环境：
 
-```powershell
+```bash
 python scripts\bootstrap_ce_mcp.py
 ```
 
@@ -72,7 +72,7 @@ python scripts\bootstrap_ce_mcp.py
 
 复制 `.env.example` 为 `.env`，并填写实际配置：
 
-```text
+```env
 CHEATPILOT_LLM_BASE_URL=
 CHEATPILOT_LLM_API_KEY=
 CHEATPILOT_LLM_MODEL=
@@ -83,7 +83,7 @@ CHEATPILOT_MCP_ARGS=
 
 常用可选配置：
 
-```text
+```env
 CHEATPILOT_LLM_TIMEOUT_SECONDS=
 CHEATPILOT_LLM_MAX_RETRIES=
 CHEATPILOT_VALUE_TYPE=
@@ -95,25 +95,25 @@ CHEATPILOT_ALLOW_LUA=
 
 CLI：
 
-```powershell
+```bash
 python -m cheatpilot "你的自然语言指令"
 ```
 
 桌面 UI：
 
-```powershell
+```bash
 .\scripts\start_ui.ps1
 ```
 
 API：
 
-```powershell
+```bash
 .\scripts\start_api.ps1
 ```
 
 健康检查和 MCP 检查：
 
-```powershell
+```bash
 python scripts\check_mcp.py
 python scripts\check_llm_tooluse.py
 ```
@@ -132,7 +132,7 @@ python scripts\check_llm_tooluse.py
 
 ## 测试
 
-```powershell
+```bash
 python -m unittest discover -s tests -v
 ```
 
