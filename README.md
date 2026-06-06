@@ -73,18 +73,12 @@ python scripts\bootstrap_ce_mcp.py
 复制 `.env.example` 为 `.env`，并填写实际配置：
 
 ```env
-# LLM 接口地址，必须填写。
-# 可填写任何 OpenAI-compatible 服务地址。
 # 示例：https://api.openai.com/v1
 CHEATPILOT_LLM_BASE_URL=
 
-# LLM API Key，必须填写。
-# 注意：这是私密密钥，只写入 .env，不要提交到仓库。
 CHEATPILOT_LLM_API_KEY=
 
-# LLM 模型名，必须填写。
 # 要选择支持 chat/completions 和 tool calling 的模型。
-# 示例：gpt-4.1、gpt-4.1-mini、mimo-v2.5-pro，或你的服务商提供的模型名。
 CHEATPILOT_LLM_MODEL=
 
 # Agent 规划模式。
@@ -111,7 +105,6 @@ CHEATPILOT_LLM_MAX_RETRIES=8
 
 # 默认数值类型。
 # 可选：byte、word、dword、qword、float、double
-# 常见游戏整数数值一般使用 dword。
 CHEATPILOT_VALUE_TYPE=dword
 
 # 单次扫描最多保留/展示的候选地址数量。
@@ -119,7 +112,6 @@ CHEATPILOT_VALUE_TYPE=dword
 CHEATPILOT_MAX_SCAN_RESULTS=25
 
 # 是否允许 LLM 直接触发额外 Lua 动作。
-# 推荐保持 0。
 # 可选：0、1
 CHEATPILOT_ALLOW_LUA=0
 ```
