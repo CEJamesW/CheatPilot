@@ -330,16 +330,80 @@ def _action_from_tool_call(name: str, arguments: dict[str, Any]) -> AgentAction:
 
 
 def result_to_tool_payload(result: ActionResult) -> dict[str, Any]:
-    return {
+    payload = {
         "action": {
             "type": result.action.type.value,
-            "arguments": result.action.arguments,
+            "arguments": _compact_for_tool_observation(result.action.arguments),
             "reason": result.action.reason,
         },
         "ok": result.ok,
         "message": result.message,
-        "data": result.data,
+        "data": _compact_for_tool_observation(result.data),
     }
+    return _fit_tool_payload(payload)
+
+
+_TOOL_OBSERVATION_MAX_CHARS = int(os.getenv("CHEATPILOT_TOOL_OBSERVATION_MAX_CHARS", "24000"))
+_TOOL_OBSERVATION_STRING_CHARS = int(os.getenv("CHEATPILOT_TOOL_OBSERVATION_STRING_CHARS", "4000"))
+_TOOL_OBSERVATION_ITEMS = int(os.getenv("CHEATPILOT_TOOL_OBSERVATION_ITEMS", "80"))
+_TOOL_OBSERVATION_DEPTH = int(os.getenv("CHEATPILOT_TOOL_OBSERVATION_DEPTH", "6"))
+
+
+def _compact_for_tool_observation(value: Any, *, depth: int = 0) -> Any:
+    if depth >= _TOOL_OBSERVATION_DEPTH:
+        return _summarize_value(value)
+    if isinstance(value, str):
+        return _truncate_text(value, _TOOL_OBSERVATION_STRING_CHARS)
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        items = [_compact_for_tool_observation(item, depth=depth + 1) for item in value[:_TOOL_OBSERVATION_ITEMS]]
+        if len(value) > _TOOL_OBSERVATION_ITEMS:
+            items.append({"truncated_items": len(value) - _TOOL_OBSERVATION_ITEMS})
+        return items
+    if isinstance(value, dict):
+        output: dict[str, Any] = {}
+        items = list(value.items())
+        for key, item in items[:_TOOL_OBSERVATION_ITEMS]:
+            output[str(key)] = _compact_for_tool_observation(item, depth=depth + 1)
+        if len(items) > _TOOL_OBSERVATION_ITEMS:
+            output["truncated_items"] = len(items) - _TOOL_OBSERVATION_ITEMS
+        return output
+    return _summarize_value(value)
+
+
+def _fit_tool_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    encoded = json.dumps(payload, ensure_ascii=False, default=str)
+    if len(encoded) <= _TOOL_OBSERVATION_MAX_CHARS:
+        return payload
+    return {
+        "action": payload.get("action"),
+        "ok": payload.get("ok"),
+        "message": payload.get("message"),
+        "data": _summarize_value(payload.get("data")),
+        "truncated_for_llm": True,
+        "original_chars": len(encoded),
+    }
+
+
+def _truncate_text(value: str, max_chars: int) -> str | dict[str, Any]:
+    if len(value) <= max_chars:
+        return value
+    return {
+        "preview": value[:max_chars],
+        "truncated": True,
+        "original_chars": len(value),
+    }
+
+
+def _summarize_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return {"type": "object", "keys": list(value.keys())[:_TOOL_OBSERVATION_ITEMS], "size": len(value)}
+    if isinstance(value, list):
+        return {"type": "array", "size": len(value)}
+    if isinstance(value, str):
+        return {"type": "string", "preview": value[:240], "original_chars": len(value)}
+    return {"type": type(value).__name__, "repr": str(value)[:240]}
 
 
 def _append_skipped_tool_results(messages: list[dict[str, Any]], tool_calls: list[dict[str, Any]]) -> None:

@@ -263,13 +263,17 @@ class CheatEngineMCPExecutor:
         if followup_data:
             if followup_data.get("write"):
                 write = followup_data["write"]
-                message += f" 已将待写入的 {label}={write['value']} 写到 {write['address']}。"
+                if write.get("ok"):
+                    message += f" 已将待写入的 {label}={write['value']} 写到 {write['address']}。"
+                else:
+                    message += f" 待写入 {label}={write['value']} 未确认成功：{write.get('error', '写入或读回失败')}。"
             if followup_data.get("base_address"):
                 message += f" {label} 基址：{followup_data['base_address']}。"
         next_step = _next_step_for_candidates(label, total, len(addresses))
+        ok = not _is_error_result(result) and _followups_ok(followup_data)
         return ActionResult(
             action=action,
-            ok=not _is_error_result(result),
+            ok=ok,
             message=message,
             data={
                 "label": label,
@@ -331,10 +335,15 @@ class CheatEngineMCPExecutor:
             address = addresses[0]
         result = self._call("write_integer", {"address": address, "value": value, "type": value_type})
         readback = self._call("read_integer", {"address": address, "type": value_type})
+        write_ok = _write_confirmed(result, readback, value)
+        if write_ok:
+            message = f"已通过 Cheat Engine MCP 将 {label}={value} 写入 {address}。"
+        else:
+            message = f"Cheat Engine MCP 已返回写入结果，但未确认 {label}={value} 已成功写入 {address}。"
         return ActionResult(
             action=action,
-            ok=not _is_error_result(result),
-            message=f"已通过 Cheat Engine MCP 将 {label}={value} 写入 {address}。",
+            ok=write_ok,
+            message=message,
             data={
                 "label": label,
                 "address": address,
@@ -342,6 +351,7 @@ class CheatEngineMCPExecutor:
                 "value_type": value_type,
                 "raw": result,
                 "readback": readback,
+                "confirmed": write_ok,
             },
         )
 
@@ -585,15 +595,19 @@ class CheatEngineMCPExecutor:
             value_type = str(pending_write.get("value_type") or self.value_type)
             raw = self._call("write_integer", {"address": address, "value": value, "type": value_type})
             readback = self._call("read_integer", {"address": address, "type": value_type})
+            ok = _write_confirmed(raw, readback, value)
             followup["write"] = {
                 "label": label,
                 "address": address,
                 "value": value,
                 "value_type": value_type,
+                "ok": ok,
                 "raw": raw,
                 "readback": readback,
+                "error": None if ok else _write_error_message(raw, readback, value),
             }
-            state.pop("pending_write", None)
+            if ok:
+                state.pop("pending_write", None)
 
         if state.get("pending_base"):
             followup["base_address"] = address
@@ -601,7 +615,8 @@ class CheatEngineMCPExecutor:
 
         if followup:
             state["final_address"] = address
-            state["completed"] = True
+            if _followups_ok(followup):
+                state["completed"] = True
             self._save_state()
         return followup
 
@@ -729,6 +744,54 @@ class CheatEngineMCPExecutor:
 
 def _is_error_result(result: Any) -> bool:
     return isinstance(result, dict) and result.get("success") is False
+
+
+def _write_confirmed(write_result: Any, readback: Any, expected: Any) -> bool:
+    if _is_error_result(write_result) or _is_error_result(readback):
+        return False
+    read_value = _extract_scalar_field(readback, "value")
+    if read_value is None:
+        return False
+    return _values_equal(read_value, expected)
+
+
+def _followups_ok(followup: dict[str, Any]) -> bool:
+    write = followup.get("write") if isinstance(followup, dict) else None
+    return not isinstance(write, dict) or bool(write.get("ok"))
+
+
+def _write_error_message(write_result: Any, readback: Any, expected: Any) -> str:
+    if _is_error_result(write_result):
+        return str(write_result.get("error") or "write_integer failed")
+    if _is_error_result(readback):
+        return str(readback.get("error") or "read_integer failed")
+    read_value = _extract_scalar_field(readback, "value")
+    if read_value is not None and not _values_equal(read_value, expected):
+        return f"readback mismatch: expected {expected}, got {read_value}"
+    return "write result was not confirmed"
+
+
+def _extract_scalar_field(value: Any, field_name: str) -> Any:
+    if isinstance(value, dict):
+        if field_name in value and not isinstance(value[field_name], (dict, list)):
+            return value[field_name]
+        for nested in value.values():
+            found = _extract_scalar_field(nested, field_name)
+            if found is not None:
+                return found
+    if isinstance(value, list):
+        for item in value:
+            found = _extract_scalar_field(item, field_name)
+            if found is not None:
+                return found
+    return None
+
+
+def _values_equal(actual: Any, expected: Any) -> bool:
+    try:
+        return int(actual) == int(expected)
+    except (TypeError, ValueError):
+        return str(actual) == str(expected)
 
 
 def _brief_result(prefix: str, result: Any) -> str:

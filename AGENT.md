@@ -60,6 +60,8 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] LLM prompt revised toward an observe-think-act agent loop instead of a fixed workflow.
 - [x] Scan label continuity improved for generic value labels and omitted-label follow-up turns.
 - [x] README restyled to match the requested concise Chinese project style while preserving the existing information.
+- [x] Tool observations sent back to the LLM are now compacted so large raw MCP/file/command outputs do not overload the next model turn.
+- [x] Numeric writes now require Cheat Engine MCP write success plus readback confirmation before CheatPilot claims the write succeeded.
 
 ## Live Results So Far
 
@@ -90,6 +92,7 @@ For ordinary numeric memory changes, the expected agent behavior is:
 5. If candidates are not unique, ask the user to change the same value and report the new value.
 6. Continue narrowing with `next_scan`.
 7. Write and read back only when the tool result identifies a usable address.
+8. Claim success only after the write result and readback confirm the requested value.
 
 ## Useful Commands
 
