@@ -123,8 +123,12 @@ class MCPStdioClient:
             payload = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
             assert process.stdin is not None
             assert process.stdout is not None
-            process.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            process.stdin.flush()
+            try:
+                process.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
+                process.stdin.flush()
+            except OSError as exc:
+                stderr = self._read_stderr_nonblocking(process)
+                raise MCPError(f"MCP request write failed for {method}: {exc}. {stderr}".strip()) from exc
 
             deadline = time.monotonic() + self.timeout_seconds
             pending: list[dict[str, Any] | Exception] = []
