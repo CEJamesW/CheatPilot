@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from itertools import count
 from typing import Any
@@ -29,6 +31,10 @@ class MCPStdioClient:
         self._ids = count(1)
         self._lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None
+        self._responses: queue.Queue[dict[str, Any] | Exception] = queue.Queue()
+        self._stderr_lines: queue.Queue[str] = queue.Queue()
+        self._stdout_thread: threading.Thread | None = None
+        self._stderr_thread: threading.Thread | None = None
         self._initialized = False
 
     def __enter__(self) -> "MCPStdioClient":
@@ -52,6 +58,10 @@ class MCPStdioClient:
             bufsize=1,
             creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
         )
+        self._stdout_thread = threading.Thread(target=self._stdout_reader, args=(self._process,), daemon=True)
+        self._stderr_thread = threading.Thread(target=self._stderr_reader, args=(self._process,), daemon=True)
+        self._stdout_thread.start()
+        self._stderr_thread.start()
         self._initialize()
 
     def close(self) -> None:
@@ -67,6 +77,8 @@ class MCPStdioClient:
                 process.kill()
         finally:
             self._process = None
+            self._stdout_thread = None
+            self._stderr_thread = None
             self._initialized = False
 
     def list_tools(self) -> list[MCPTool]:
@@ -114,17 +126,53 @@ class MCPStdioClient:
             process.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
             process.stdin.flush()
 
-            while True:
-                line = process.stdout.readline()
-                if line == "":
-                    stderr = self._read_stderr_nonblocking(process)
-                    raise MCPError(f"MCP server exited or closed stdout. {stderr}".strip())
+            deadline = time.monotonic() + self.timeout_seconds
+            pending: list[dict[str, Any] | Exception] = []
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        stderr = self._read_stderr_nonblocking(process)
+                        raise MCPError(f"MCP request timed out after {self.timeout_seconds:.1f}s: {method}. {stderr}".strip())
+                    item = self._responses.get(timeout=remaining)
+                    if isinstance(item, Exception):
+                        raise MCPError(f"MCP server stdout error: {item}")
+                    message = item
+                    if message.get("id") != request_id:
+                        pending.append(message)
+                        continue
+                    if "error" in message:
+                        raise MCPError(str(message["error"]))
+                    return dict(message.get("result", {}))
+            except queue.Empty:
+                stderr = self._read_stderr_nonblocking(process)
+                raise MCPError(f"MCP request timed out after {self.timeout_seconds:.1f}s: {method}. {stderr}".strip())
+            finally:
+                for item in pending:
+                    self._responses.put(item)
+
+    def _stdout_reader(self, process: subprocess.Popen[str]) -> None:
+        assert process.stdout is not None
+        while True:
+            line = process.stdout.readline()
+            if line == "":
+                stderr = self._read_stderr_nonblocking(process)
+                self._responses.put(MCPError(f"MCP server exited or closed stdout. {stderr}".strip()))
+                return
+            try:
                 message = json.loads(line)
-                if message.get("id") != request_id:
-                    continue
-                if "error" in message:
-                    raise MCPError(str(message["error"]))
-                return dict(message.get("result", {}))
+            except json.JSONDecodeError as exc:
+                self._responses.put(MCPError(f"invalid MCP JSON response: {exc}; line={line[:240]!r}"))
+                continue
+            self._responses.put(message)
+
+    def _stderr_reader(self, process: subprocess.Popen[str]) -> None:
+        assert process.stderr is not None
+        while True:
+            line = process.stderr.readline()
+            if line == "":
+                return
+            self._stderr_lines.put(line.rstrip())
 
     def _notify(self, method: str, params: dict[str, Any]) -> None:
         process = self._require_process()
@@ -160,7 +208,17 @@ class MCPStdioClient:
         return "\n".join(str(item.get("text", item)) for item in content)
 
     @staticmethod
-    def _read_stderr_nonblocking(process: subprocess.Popen[str]) -> str:
+    def _drain_queue(lines: queue.Queue[str], limit: int = 20) -> list[str]:
+        drained: list[str] = []
+        while len(drained) < limit:
+            try:
+                drained.append(lines.get_nowait())
+            except queue.Empty:
+                break
+        return drained
+
+    def _read_stderr_nonblocking(self, process: subprocess.Popen[str]) -> str:
         if process.stderr is None:
             return ""
-        return ""
+        lines = self._drain_queue(self._stderr_lines)
+        return "\n".join(lines[-10:])

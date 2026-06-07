@@ -22,6 +22,7 @@ def build_agent(
         allow_lua_actions=cfg.allow_lua_actions,
         value_type=cfg.value_type,
         max_scan_results=cfg.max_scan_results,
+        timeout_seconds=cfg.mcp_timeout_seconds,
     )
     executor = CompositeExecutor(memory_executor=ce_executor, local_executor=LocalToolExecutor())
 

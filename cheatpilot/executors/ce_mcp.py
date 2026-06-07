@@ -20,6 +20,7 @@ class CheatEngineMCPExecutor:
     protection: str = "+W-C"
     max_scan_results: int = 25
     allow_lua_actions: bool = False
+    timeout_seconds: float = 60.0
     state_path: Path = field(default_factory=lambda: PROJECT_ROOT / "runtime" / "session_state.json")
     _client: MCPStdioClient | None = field(default=None, init=False, repr=False)
     _last_scan_by_label: dict[str, list[str]] = field(default_factory=dict, init=False)
@@ -737,7 +738,7 @@ class CheatEngineMCPExecutor:
 
     def _get_client(self) -> MCPStdioClient:
         if self._client is None:
-            self._client = MCPStdioClient(self.command, self.args)
+            self._client = MCPStdioClient(self.command, self.args, timeout_seconds=self.timeout_seconds)
             self._client.start()
         return self._client
 

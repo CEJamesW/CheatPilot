@@ -30,7 +30,7 @@ def main() -> int:
             return 1
 
     try:
-        with MCPStdioClient(config.mcp_command, config.mcp_args or []) as client:
+        with MCPStdioClient(config.mcp_command, config.mcp_args or [], timeout_seconds=config.mcp_timeout_seconds) as client:
             ping = client.call_tool("ping", {})
             print("ping:")
             print(json.dumps(ping, ensure_ascii=False, indent=2))

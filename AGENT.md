@@ -66,6 +66,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Bootstrap and autoload scripts now target the vendored CheatPilot MCP runtime instead of a developer-specific `D:\MCP` source path.
 - [x] MCP check now fails early with clear local path/dependency guidance when Python or the MCP server script is missing.
 - [x] Project dependencies now include the MCP SDK and Windows pipe dependency needed by the vendored CE MCP server.
+- [x] MCP stdio calls now have a real request timeout and stderr diagnostics so a stuck Cheat Engine bridge cannot leave the UI waiting forever.
 
 ## Live Results So Far
 

@@ -15,6 +15,7 @@ DEFAULT_LLM_MAX_RETRIES = 3
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MCP_COMMAND = sys.executable
 DEFAULT_MCP_ARGS = [str(PROJECT_ROOT / "runtime" / "ce_mcp" / "mcp_cheatengine.py")]
+DEFAULT_MCP_TIMEOUT_SECONDS = 60.0
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class CheatPilotConfig:
     planner: str = "llm"
     mcp_command: str = DEFAULT_MCP_COMMAND
     mcp_args: list[str] | None = None
+    mcp_timeout_seconds: float = DEFAULT_MCP_TIMEOUT_SECONDS
     allow_lua_actions: bool = False
     value_type: str = "dword"
     max_scan_results: int = 25
@@ -43,6 +45,7 @@ class CheatPilotConfig:
             planner=os.getenv("CHEATPILOT_PLANNER", "llm").lower(),
             mcp_command=os.getenv("CHEATPILOT_MCP_COMMAND", DEFAULT_MCP_COMMAND),
             mcp_args=_normalize_mcp_args(_parse_args(os.getenv("CHEATPILOT_MCP_ARGS"), DEFAULT_MCP_ARGS)),
+            mcp_timeout_seconds=_parse_float(os.getenv("CHEATPILOT_MCP_TIMEOUT_SECONDS"), DEFAULT_MCP_TIMEOUT_SECONDS),
             allow_lua_actions=os.getenv("CHEATPILOT_ALLOW_LUA", "").lower() in {"1", "true", "yes", "on"},
             value_type=os.getenv("CHEATPILOT_VALUE_TYPE", "dword"),
             max_scan_results=_parse_int(os.getenv("CHEATPILOT_MAX_SCAN_RESULTS"), 25),

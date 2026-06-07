@@ -69,11 +69,15 @@ scripts/                     启动、检查和初始化脚本
 
 ## 安装
 
-    pip install -e .
+```bash
+pip install -e .
+```
 
 初始化 Cheat Engine MCP 运行环境：
 
-    python scripts\bootstrap_ce_mcp.py
+```powershell
+python scripts\bootstrap_ce_mcp.py
+```
 
 ## 配置
 
@@ -102,6 +106,10 @@ CHEATPILOT_MCP_COMMAND=
 # 通常指向 runtime/ce_mcp/mcp_cheatengine.py 或 vendor 中的 MCP Server 脚本。
 CHEATPILOT_MCP_ARGS=
 
+# MCP 单次工具调用超时时间，单位为秒。
+# 可选，默认建议：60
+CHEATPILOT_MCP_TIMEOUT_SECONDS=60
+
 # LLM 单次请求超时时间，单位为秒。
 # 可选，默认建议：45
 CHEATPILOT_LLM_TIMEOUT_SECONDS=45
@@ -127,20 +135,28 @@ CHEATPILOT_ALLOW_LUA=0
 
 CLI：
 
-    python -m cheatpilot "你的自然语言指令"
+```powershell
+python -m cheatpilot "你的自然语言指令"
+```
 
 桌面 UI：
 
-    .\scripts\start_ui.ps1
+```powershell
+.\scripts\start_ui.ps1
+```
 
 API：
 
-    .\scripts\start_api.ps1
+```powershell
+.\scripts\start_api.ps1
+```
 
 健康检查和 MCP 检查：
 
-    python scripts\check_mcp.py
-    python scripts\check_llm_tooluse.py
+```powershell
+python scripts\check_mcp.py
+python scripts\check_llm_tooluse.py
+```
 
 ## 使用方式
 
@@ -156,7 +172,9 @@ API：
 
 ## 测试
 
-    python -m unittest discover -s tests -v
+```powershell
+python -m unittest discover -s tests -v
+```
 
 ## 项目状态
 
