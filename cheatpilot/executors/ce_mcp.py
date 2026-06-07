@@ -197,7 +197,7 @@ class CheatEngineMCPExecutor:
         value = str(action.arguments["value"])
         value_type = str(action.arguments.get("value_type") or self.value_type)
         self._clear_label_followups(label)
-        result = self._call("scan_all", {"value": value, "type": "exact", "protection": self.protection})
+        result = self._call("scan_all", {"value": value, "type": value_type, "protection": self.protection})
         addresses = _extract_addresses(result)
         if not addresses:
             extra = self._try_get_scan_results()
@@ -254,7 +254,8 @@ class CheatEngineMCPExecutor:
             addresses = _extract_addresses(extra)
             result = {"next_scan": result, "results": extra}
         total = _extract_total_count(result)
-        self._remember_scan(label, addresses, total, value, self.value_type)
+        value_type = str(self._label_state(label).get("value_type") or self.value_type)
+        self._remember_scan(label, addresses, total, value, value_type)
         message = f"已执行 next_scan({scan_type})，当前返回 {len(addresses)} 个候选地址。"
         if total and total > len(addresses):
             message += f" Cheat Engine 总匹配数为 {total}。"
@@ -279,6 +280,7 @@ class CheatEngineMCPExecutor:
             data={
                 "label": label,
                 "value": value,
+                "value_type": value_type,
                 "scan_type": scan_type,
                 "addresses": addresses,
                 "total": total,
@@ -289,8 +291,8 @@ class CheatEngineMCPExecutor:
         )
 
     def _write_value(self, action: AgentAction) -> ActionResult:
-        value = int(action.arguments["value"])
         value_type = str(action.arguments.get("value_type") or self.value_type)
+        value = _coerce_numeric_value(action.arguments["value"], value_type)
         explicit_address = action.arguments.get("address")
         if explicit_address:
             label = _canonical_label(action.arguments.get("label") or "value")
@@ -592,8 +594,8 @@ class CheatEngineMCPExecutor:
         followup: dict[str, Any] = {}
         pending_write = state.get("pending_write")
         if isinstance(pending_write, dict):
-            value = int(pending_write["value"])
             value_type = str(pending_write.get("value_type") or self.value_type)
+            value = _coerce_numeric_value(pending_write["value"], value_type)
             raw = self._call("write_integer", {"address": address, "value": value, "type": value_type})
             readback = self._call("read_integer", {"address": address, "type": value_type})
             ok = _write_confirmed(raw, readback, value)
@@ -734,7 +736,12 @@ class CheatEngineMCPExecutor:
 
     def _call(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         client = self._get_client()
-        return client.call_tool(tool_name, arguments)
+        try:
+            return client.call_tool(tool_name, arguments)
+        except (MCPError, OSError) as exc:
+            if _should_reset_mcp_client(str(exc)):
+                self.close()
+            raise
 
     def _get_client(self) -> MCPStdioClient:
         if self._client is None:
@@ -754,6 +761,17 @@ def _write_confirmed(write_result: Any, readback: Any, expected: Any) -> bool:
     if read_value is None:
         return False
     return _values_equal(read_value, expected)
+
+
+def _coerce_numeric_value(value: Any, value_type: str) -> int | float:
+    normalized_type = value_type.lower()
+    if normalized_type in {"float", "double"}:
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.lower().startswith(("0x", "-0x", "+0x")):
+            return int(text, 16)
+    return int(value)
 
 
 def _followups_ok(followup: dict[str, Any]) -> bool:
@@ -789,6 +807,11 @@ def _extract_scalar_field(value: Any, field_name: str) -> Any:
 
 
 def _values_equal(actual: Any, expected: Any) -> bool:
+    if isinstance(actual, float) or isinstance(expected, float):
+        try:
+            return abs(float(actual) - float(expected)) <= 1e-6
+        except (TypeError, ValueError):
+            return str(actual) == str(expected)
     try:
         return int(actual) == int(expected)
     except (TypeError, ValueError):
@@ -825,6 +848,21 @@ def _friendly_error(message: str) -> str:
             "and close other MCP clients if the bridge pipe is already occupied."
         )
     return message
+
+
+def _should_reset_mcp_client(message: str) -> bool:
+    lowered = message.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "timed out",
+            "closed stdout",
+            "server exited",
+            "broken pipe",
+            "pipe not found",
+            "ce_mcp_bridge",
+        )
+    )
 
 
 def _process_matches(expected: str, process_info: Any) -> bool:

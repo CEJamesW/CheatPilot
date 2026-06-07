@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -25,8 +26,13 @@ class ToolUseChatAgent:
     max_tool_rounds: int = 6
     max_history_messages: int = 12
     _conversation: list[dict[str, str]] = field(default_factory=list, init=False, repr=False)
+    _handle_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
 
     def handle(self, message: str) -> AgentResponse:
+        with self._handle_lock:
+            return self._handle_locked(message)
+
+    def _handle_locked(self, message: str) -> AgentResponse:
         normalized = message.strip()
         if not normalized:
             raise ValueError("message cannot be empty")
@@ -41,10 +47,16 @@ class ToolUseChatAgent:
         assistant_message: str | None = None
 
         for _round in range(self.max_tool_rounds):
-            response = self._chat(messages, tools=tool_schemas())
+            try:
+                response = self._chat(messages, tools=tool_schemas())
+            except Exception as exc:
+                if not results:
+                    raise
+                assistant_message = _fallback_assistant_message(results, exc)
+                break
             choice = dict(response["choices"][0]["message"])
             messages.append(choice)
-            tool_calls = choice.get("tool_calls") or []
+            tool_calls = _normalize_tool_calls(choice.get("tool_calls"))
             if not tool_calls:
                 assistant_message = str(choice.get("content") or "我已处理完这轮请求。")
                 if not actions:
@@ -62,13 +74,21 @@ class ToolUseChatAgent:
             for index, tool_call in enumerate(tool_calls):
                 function = tool_call.get("function") or {}
                 name = str(function.get("name") or "")
-                raw_args = str(function.get("arguments") or "{}")
-                try:
-                    arguments = json.loads(raw_args)
-                except json.JSONDecodeError:
-                    arguments = {}
+                arguments, parse_error = _parse_tool_arguments(function.get("arguments"))
                 action = _action_from_tool_call(name, arguments)
-                result = self.executor.execute(action)
+                if parse_error:
+                    result = ActionResult(
+                        action=action,
+                        ok=False,
+                        message=f"工具参数格式错误：{parse_error}",
+                        data={
+                            "tool_argument_error": True,
+                            "error": parse_error,
+                            "next_step": "请用该工具 schema 要求的 JSON object 参数重新调用工具。",
+                        },
+                    )
+                else:
+                    result = self.executor.execute(action)
                 actions.append(action)
                 results.append(result)
                 messages.append(
@@ -89,7 +109,12 @@ class ToolUseChatAgent:
                 break
 
         if assistant_message is None:
-            assistant_message = self._finalize_from_tool_results(messages)
+            try:
+                assistant_message = self._finalize_from_tool_results(messages)
+            except Exception as exc:
+                if not results:
+                    raise
+                assistant_message = _fallback_assistant_message(results, exc)
 
         if not actions:
             actions.append(
@@ -190,6 +215,7 @@ class ToolUseChatAgent:
             "For string replacement, call scan_string, write_string, then read_string when verification is useful. "
             "For explicit byte patches, call write_bytes only when the user provides an explicit address and byte sequence. "
             "Use list_files/read_file/write_file/run_command when the user asks you to inspect or edit project files or run commands. "
+            "For run_command, choose shell='powershell' for Windows commands, shell='cmd' for cmd builtins, or shell='bash' when the user explicitly asks for bash-style commands. "
             "For casual chat or help, answer normally without tools. "
             "Do not claim success unless a tool result confirms it."
         )
@@ -210,19 +236,19 @@ def tool_schemas() -> list[dict[str, Any]]:
         _tool(
             "scan_exact_value",
             "Scan for an exact numeric value.",
-            {"label": {"type": "string"}, "value": {"type": "integer"}, "value_type": {"type": "string"}},
+            {"label": {"type": "string"}, "value": _numeric_value_schema(), "value_type": {"type": "string"}},
             ["label", "value"],
         ),
         _tool(
             "next_scan",
             "Filter previous scan by a new value.",
-            {"label": {"type": "string"}, "value": {"type": "integer"}, "scan_type": {"type": "string"}},
+            {"label": {"type": "string"}, "value": _numeric_value_schema(), "scan_type": {"type": "string"}},
             ["value"],
         ),
         _tool(
             "write_value",
             "Write a numeric value to a unique known address or explicit address.",
-            {"label": {"type": "string"}, "value": {"type": "integer"}, "address": {"type": "string"}, "value_type": {"type": "string"}},
+            {"label": {"type": "string"}, "value": _numeric_value_schema(), "address": {"type": "string"}, "value_type": {"type": "string"}},
             ["value"],
         ),
         _tool("print_base_address", "Print the unique address/base address for a label.", {"label": {"type": "string"}}),
@@ -299,8 +325,13 @@ def tool_schemas() -> list[dict[str, Any]]:
         ),
         _tool(
             "run_command",
-            "Run a local PowerShell command and return stdout, stderr, and exit code.",
-            {"command": {"type": "string"}, "cwd": {"type": "string"}, "timeout_seconds": {"type": "integer"}},
+            "Run a local command and return stdout, stderr, and exit code. Default shell is powershell; set shell for cmd/bash/sh when needed.",
+            {
+                "command": {"type": "string"},
+                "cwd": {"type": "string"},
+                "timeout_seconds": {"type": "integer"},
+                "shell": {"type": "string", "enum": ["powershell", "pwsh", "cmd", "bash", "sh"]},
+            },
             ["command"],
         ),
     ]
@@ -320,6 +351,10 @@ def _tool(name: str, description: str, properties: dict[str, dict[str, Any]], re
     }
 
 
+def _numeric_value_schema() -> dict[str, Any]:
+    return {"anyOf": [{"type": "integer"}, {"type": "number"}, {"type": "string"}]}
+
+
 def _action_from_tool_call(name: str, arguments: dict[str, Any]) -> AgentAction:
     try:
         action_type = ActionType(name)
@@ -327,6 +362,54 @@ def _action_from_tool_call(name: str, arguments: dict[str, Any]) -> AgentAction:
         action_type = ActionType.UNSUPPORTED
         arguments = {"category": "unknown_tool", "tool_name": name, "arguments": arguments}
     return AgentAction(type=action_type, arguments=arguments, reason="LLM tool call")
+
+
+def _parse_tool_arguments(raw_args: Any) -> tuple[dict[str, Any], str | None]:
+    if raw_args in (None, ""):
+        return {}, None
+    if isinstance(raw_args, dict):
+        return dict(raw_args), None
+    if not isinstance(raw_args, str):
+        return {}, f"arguments must be a JSON object string, got {type(raw_args).__name__}"
+    try:
+        parsed = json.loads(raw_args)
+    except json.JSONDecodeError as exc:
+        return {}, f"invalid JSON: {exc.msg} at char {exc.pos}"
+    if not isinstance(parsed, dict):
+        return {}, f"arguments must decode to a JSON object, got {type(parsed).__name__}"
+    return parsed, None
+
+
+def _normalize_tool_calls(value: Any) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _fallback_assistant_message(results: list[ActionResult], exc: Exception) -> str:
+    last = results[-1]
+    lines = [last.message]
+    next_step = _find_next_step_in_result(last)
+    if next_step:
+        lines.append(f"下一步：{next_step}")
+    lines.append(f"注：工具结果已返回，但最终 LLM 总结失败：{exc}")
+    return "\n".join(lines)
+
+
+def _find_next_step_in_result(result: ActionResult) -> str | None:
+    next_step = result.data.get("next_step")
+    if next_step:
+        return str(next_step)
+    followup = result.data.get("followup")
+    if isinstance(followup, dict):
+        write = followup.get("write")
+        if isinstance(write, dict) and write.get("error"):
+            return str(write["error"])
+    return None
 
 
 def result_to_tool_payload(result: ActionResult) -> dict[str, Any]:

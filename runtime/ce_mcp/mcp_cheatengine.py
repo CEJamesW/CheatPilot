@@ -327,7 +327,7 @@ def next_scan(value: str, scan_type: str = "exact") -> str:
     return format_result(ce_client.send_command("next_scan", {"value": value, "scan_type": scan_type}))
 
 @mcp.tool()
-def write_integer(address: str, value: int, type: str = "dword") -> str:
+def write_integer(address: str, value: int | float, type: str = "dword") -> str:
     """Write a number to memory. Types: byte, word, dword, qword, float, double."""
     return format_result(ce_client.send_command("write_integer", {"address": address, "value": value, "type": type}))
 

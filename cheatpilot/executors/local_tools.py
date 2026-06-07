@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -126,15 +127,69 @@ class LocalToolExecutor:
         command = str(action.arguments["command"])
         cwd = self._resolve_path(action.arguments.get("cwd") or self.root)
         timeout_seconds = int(action.arguments.get("timeout_seconds") or self.default_timeout_seconds)
-        completed = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds,
-        )
+        shell = str(action.arguments.get("shell") or "powershell").strip().lower() or "powershell"
+        shell_commands = {
+            "powershell": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            "pwsh": ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            "cmd": ["cmd", "/c", command],
+            "bash": ["bash", "-lc", command],
+            "sh": ["sh", "-lc", command],
+        }
+        if shell not in shell_commands:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"Unsupported shell: {shell}.",
+                data={"command": command, "cwd": str(cwd), "shell": shell, "error": "unsupported_shell"},
+            )
+
+        argv = shell_commands[shell]
+        executable = shutil.which(argv[0])
+        if executable is None:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"Requested shell is not available: {shell}.",
+                data={"command": command, "cwd": str(cwd), "shell": shell, "error": "shell_unavailable"},
+            )
+        argv[0] = executable
+
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout, stdout_truncated = _truncate(_decode_output(exc.stdout), self.max_output_chars)
+            stderr, stderr_truncated = _truncate(_decode_output(exc.stderr), self.max_output_chars)
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"Command timed out after {timeout_seconds} seconds.",
+                data={
+                    "command": command,
+                    "cwd": str(cwd),
+                    "shell": shell,
+                    "error": "timeout",
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "stdout_truncated": stdout_truncated,
+                    "stderr_truncated": stderr_truncated,
+                },
+            )
+        except OSError as exc:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"Failed to run command with shell {shell}: {exc}",
+                data={"command": command, "cwd": str(cwd), "shell": shell, "error": str(exc)},
+            )
+
         stdout, stdout_truncated = _truncate(completed.stdout, self.max_output_chars)
         stderr, stderr_truncated = _truncate(completed.stderr, self.max_output_chars)
         ok = completed.returncode == 0
@@ -145,6 +200,7 @@ class LocalToolExecutor:
             data={
                 "command": command,
                 "cwd": str(cwd),
+                "shell": shell,
                 "returncode": completed.returncode,
                 "stdout": stdout,
                 "stderr": stderr,
@@ -164,6 +220,14 @@ def _truncate(value: str, max_chars: int) -> tuple[str, bool]:
     if len(value) <= max_chars:
         return value, False
     return value[:max_chars], True
+
+
+def _decode_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
 
 
 def _is_relative_to(path: Path, base: Path) -> bool:

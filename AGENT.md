@@ -67,6 +67,14 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] MCP check now fails early with clear local path/dependency guidance when Python or the MCP server script is missing.
 - [x] Project dependencies now include the MCP SDK and Windows pipe dependency needed by the vendored CE MCP server.
 - [x] MCP stdio calls now have a real request timeout and stderr diagnostics so a stuck Cheat Engine bridge cannot leave the UI waiting forever.
+- [x] Tool-use arguments are now validated before execution so malformed LLM tool-call JSON is returned as a tool observation instead of crashing the chat.
+- [x] One Agent instance now serializes full chat turns to protect LLM history, CE scan state, and `runtime/session_state.json` from concurrent UI/API requests.
+- [x] Desktop UI now blocks duplicate sends while a request is already thinking.
+- [x] If final LLM summarization fails after real tool results were produced, CheatPilot now returns the real last tool result and next step instead of dropping the plan.
+- [x] Stale MCP stdio clients are discarded after timeout/pipe/stdout failures so the next turn can reconnect cleanly.
+- [x] `run_command` now supports selectable `powershell`, `pwsh`, `cmd`, `bash`, and `sh` shells while keeping PowerShell as the default.
+- [x] High-level numeric tools now accept integer, float, and string numeric values; `float`/`double` value types are preserved across scan/write/readback.
+- [x] The vendored Cheat Engine MCP wrapper now exposes `write_integer` as `int | float`, matching the Lua bridge's real float/double support.
 
 ## Live Results So Far
 

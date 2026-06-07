@@ -17,6 +17,7 @@ class CheatPilotWindow(tk.Tk):
         self.minsize(360, 520)
         self.attributes("-topmost", True)
         self.agent = build_agent()
+        self._busy = False
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -95,11 +96,13 @@ class CheatPilotWindow(tk.Tk):
         self._send_text(message)
 
     def _send_text(self, message: str) -> None:
-        if not message:
+        if not message or self._busy:
             return
+        self._busy = True
         self.input_var.set("")
         self._append("user", message)
         self.send_button.configure(state=tk.DISABLED)
+        self.entry.configure(state=tk.DISABLED)
         self.status_var.set("思考中...")
         threading.Thread(target=self._run_agent, args=(message,), daemon=True).start()
 
@@ -114,6 +117,8 @@ class CheatPilotWindow(tk.Tk):
     def _finish_agent_output(self, output: str) -> None:
         self._append("assistant", output)
         self.status_var.set("")
+        self._busy = False
+        self.entry.configure(state=tk.NORMAL)
         self.send_button.configure(state=tk.NORMAL)
         self.entry.focus_set()
 
