@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -11,8 +12,8 @@ DEFAULT_LLM_BASE_URL = "https://ai.saurlax.com/v1"
 DEFAULT_LLM_MODEL = "mimo-v2.5-pro"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
 DEFAULT_LLM_MAX_RETRIES = 3
-DEFAULT_MCP_COMMAND = r"D:\MCP\cheatengine-mcp-bridge\.venv\Scripts\python.exe"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_MCP_COMMAND = sys.executable
 DEFAULT_MCP_ARGS = [str(PROJECT_ROOT / "runtime" / "ce_mcp" / "mcp_cheatengine.py")]
 
 
@@ -41,7 +42,7 @@ class CheatPilotConfig:
             llm_max_retries=_parse_int(os.getenv("CHEATPILOT_LLM_MAX_RETRIES"), DEFAULT_LLM_MAX_RETRIES),
             planner=os.getenv("CHEATPILOT_PLANNER", "llm").lower(),
             mcp_command=os.getenv("CHEATPILOT_MCP_COMMAND", DEFAULT_MCP_COMMAND),
-            mcp_args=_parse_args(os.getenv("CHEATPILOT_MCP_ARGS"), DEFAULT_MCP_ARGS),
+            mcp_args=_normalize_mcp_args(_parse_args(os.getenv("CHEATPILOT_MCP_ARGS"), DEFAULT_MCP_ARGS)),
             allow_lua_actions=os.getenv("CHEATPILOT_ALLOW_LUA", "").lower() in {"1", "true", "yes", "on"},
             value_type=os.getenv("CHEATPILOT_VALUE_TYPE", "dword"),
             max_scan_results=_parse_int(os.getenv("CHEATPILOT_MAX_SCAN_RESULTS"), 25),
@@ -54,6 +55,18 @@ def _parse_args(value: str | None, default: list[str]) -> list[str]:
     if ";" in value:
         return [item.strip() for item in value.split(";") if item.strip()]
     return shlex.split(value, posix=False)
+
+
+def _normalize_mcp_args(args: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for arg in args:
+        path = Path(arg)
+        looks_like_path = path.suffix.lower() == ".py" or "\\" in arg or "/" in arg
+        if looks_like_path and not path.is_absolute():
+            normalized.append(str((PROJECT_ROOT / path).resolve()))
+        else:
+            normalized.append(arg)
+    return normalized
 
 
 def load_dotenv(path: Path) -> None:

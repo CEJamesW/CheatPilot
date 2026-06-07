@@ -62,6 +62,10 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] README restyled to match the requested concise Chinese project style while preserving the existing information.
 - [x] Tool observations sent back to the LLM are now compacted so large raw MCP/file/command outputs do not overload the next model turn.
 - [x] Numeric writes now require Cheat Engine MCP write success plus readback confirmation before CheatPilot claims the write succeeded.
+- [x] Default MCP command now uses the current Python interpreter plus the vendored `runtime/ce_mcp/mcp_cheatengine.py`, with `.env` still able to override it.
+- [x] Bootstrap and autoload scripts now target the vendored CheatPilot MCP runtime instead of a developer-specific `D:\MCP` source path.
+- [x] MCP check now fails early with clear local path/dependency guidance when Python or the MCP server script is missing.
+- [x] Project dependencies now include the MCP SDK and Windows pipe dependency needed by the vendored CE MCP server.
 
 ## Live Results So Far
 

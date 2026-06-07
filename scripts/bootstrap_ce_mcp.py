@@ -2,41 +2,53 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_DIR = Path(r"D:\MCP\cheatengine-mcp-bridge\MCP_Server")
+DEFAULT_SOURCE_DIR = Path(r"D:\MCP\cheatengine-mcp-bridge\MCP_Server")
 RUNTIME_DIR = ROOT / "runtime" / "ce_mcp"
 CHEAT_ENGINE_AUTORUN = Path(r"C:\Program Files\Cheat Engine\autorun")
 DEFAULT_PIPE_NAME = "CE_MCP_Bridge_CheatPilot"
 
 
-def build_runtime(pipe_name: str) -> tuple[Path, Path]:
-    if not SOURCE_DIR.exists():
-        raise FileNotFoundError(f"source MCP server directory not found: {SOURCE_DIR}")
-
+def build_runtime(pipe_name: str, source_dir: Path | None = None) -> tuple[Path, Path]:
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-
-    lua_source = SOURCE_DIR / "ce_mcp_bridge.lua"
-    py_source = SOURCE_DIR / "mcp_cheatengine.py"
     lua_target = RUNTIME_DIR / "ce_mcp_bridge.lua"
     py_target = RUNTIME_DIR / "mcp_cheatengine.py"
 
-    lua_text = lua_source.read_text(encoding="utf-8")
+    if source_dir is not None:
+        if not source_dir.exists():
+            raise FileNotFoundError(f"source MCP server directory not found: {source_dir}")
+        lua_source = source_dir / "ce_mcp_bridge.lua"
+        py_source = source_dir / "mcp_cheatengine.py"
+        requirements_source = source_dir / "requirements.txt"
+        lua_text = lua_source.read_text(encoding="utf-8")
+        py_text = py_source.read_text(encoding="utf-8")
+        if requirements_source.exists():
+            shutil.copy2(requirements_source, RUNTIME_DIR / "requirements.txt")
+    else:
+        if not lua_target.exists() or not py_target.exists():
+            raise FileNotFoundError(
+                "runtime CE MCP files are missing; pass --source-dir with a cheatengine-mcp-bridge MCP_Server path"
+            )
+        lua_text = lua_target.read_text(encoding="utf-8")
+        py_text = py_target.read_text(encoding="utf-8")
+
     lua_text = lua_text.replace('local PIPE_NAME = "CE_MCP_Bridge_v99"', f'local PIPE_NAME = "{pipe_name}"')
+    lua_text = lua_text.replace('local PIPE_NAME = "CE_MCP_Bridge_CheatPilot"', f'local PIPE_NAME = "{pipe_name}"')
     lua_target.write_text(lua_text, encoding="utf-8")
 
-    py_text = py_source.read_text(encoding="utf-8")
     py_text = py_text.replace(
         r'PIPE_NAME = r"\\.\pipe\CE_MCP_Bridge_v99"',
         rf'PIPE_NAME = r"\\.\pipe\{pipe_name}"',
     )
+    py_text = py_text.replace(
+        r'PIPE_NAME = r"\\.\pipe\CE_MCP_Bridge_CheatPilot"',
+        rf'PIPE_NAME = r"\\.\pipe\{pipe_name}"',
+    )
     py_target.write_text(py_text, encoding="utf-8")
-
-    requirements_source = SOURCE_DIR / "requirements.txt"
-    if requirements_source.exists():
-        shutil.copy2(requirements_source, RUNTIME_DIR / "requirements.txt")
 
     return lua_target, py_target
 
@@ -69,7 +81,7 @@ def update_env(py_target: Path) -> None:
         lines = env_path.read_text(encoding="utf-8").splitlines()
 
     replacements = {
-        "CHEATPILOT_MCP_COMMAND": r"D:\MCP\cheatengine-mcp-bridge\.venv\Scripts\python.exe",
+        "CHEATPILOT_MCP_COMMAND": sys.executable,
         "CHEATPILOT_MCP_ARGS": str(py_target),
     }
     seen: set[str] = set()
@@ -95,13 +107,19 @@ def update_env(py_target: Path) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build CheatPilot's dedicated Cheat Engine MCP runtime.")
     parser.add_argument("--pipe-name", default=DEFAULT_PIPE_NAME)
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help=f"Optional MCP_Server source directory. Defaults to existing runtime files; common local source: {DEFAULT_SOURCE_DIR}",
+    )
     parser.add_argument("--no-autoload", action="store_true")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
-    lua_target, py_target = build_runtime(args.pipe_name)
+    lua_target, py_target = build_runtime(args.pipe_name, args.source_dir)
     update_env(py_target)
 
     print(f"Built CheatPilot CE bridge: {lua_target}")
