@@ -53,6 +53,13 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Configured endpoint verified to return OpenAI-compatible `tool_calls`.
 - [x] Attach validation added so a failed/mismatched `openProcess` cannot keep scanning the previous attached process.
 - [x] Agent stops the plan immediately after attach failure to avoid scanning/writing the wrong process.
+- [x] Tool-use loop expanded with a `think` tool so the LLM can expose concise operational state before non-trivial actions.
+- [x] Local project tools added for the agent: `list_files`, `read_file`, `write_file`, and `run_command`.
+- [x] Composite executor added so local tools route locally while all memory operations still route to Cheat Engine MCP.
+- [x] Raw `ce_mcp_call` added for direct real Cheat Engine MCP tool calls when high-level tools are not enough.
+- [x] LLM prompt revised toward an observe-think-act agent loop instead of a fixed workflow.
+- [x] Scan label continuity improved for generic value labels and omitted-label follow-up turns.
+- [x] README restyled to match the requested concise Chinese project style while preserving the existing information.
 
 ## Live Results So Far
 
@@ -65,20 +72,24 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 
 ## Current Product Behavior
 
-When the user starts a fresh memory-modification request:
+CheatPilot is now a tool-use agent loop rather than a fixed scripted workflow:
 
-1. Attach to the named process.
-2. Run `scan_all` for the current value.
-3. Save candidate addresses and total count.
-4. Defer write/base printing if candidates are not unique.
-5. Ask the user to change the value and report the new value.
+1. The LLM receives every user message first.
+2. The LLM uses `think` for concise operational state when the task is non-trivial.
+3. The LLM asks the user for missing facts such as the current visible value instead of guessing.
+4. High-level memory tools execute through real Cheat Engine MCP and preserve scan session state.
+5. Raw `ce_mcp_call` can call real Cheat Engine MCP tools for low-level inspection when needed.
+6. Local tools let the agent inspect project files or run commands without leaving the same tool loop.
 
-When the user reports a new value:
+For ordinary numeric memory changes, the expected agent behavior is:
 
-1. Run `next_scan`.
-2. Update the saved scan state.
-3. If still not unique, ask for another value change.
-4. If unique, write the pending value and print the address/base address.
+1. Attach to the named target process through Cheat Engine MCP when needed.
+2. If the user did not provide the current value, ask for it.
+3. Scan the current value with a stable label.
+4. Observe candidate count from the real MCP result.
+5. If candidates are not unique, ask the user to change the same value and report the new value.
+6. Continue narrowing with `next_scan`.
+7. Write and read back only when the tool result identifies a usable address.
 
 ## Useful Commands
 

@@ -1,12 +1,21 @@
 # CheatPilot：由 LLM 驱动的实时内存修改系统
 
+> 用自然语言对话，让 AI 自动修改内存。
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![LLM](https://img.shields.io/badge/LLM-tool--calling-111827?style=flat-square)
+![Backend](https://img.shields.io/badge/Backend-Cheat%20Engine%20MCP-ef4444?style=flat-square)
+
 CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普通语言描述目标进程、当前数值和期望结果，系统由 LLM 规划工具调用，并通过 Cheat Engine MCP 执行进程附加、内存扫描、结果筛选、数值写入和地址输出等操作。
 
----
+* * *
 
-> **目标：** 用自然语言对话，让 AI 自动修改内存
->
-> **依赖：** Cheat Engine MCP（`C:\Program Files\Cheat Engine`）
+## 信息
+
+| 项目 | 内容 |
+| --- | --- |
+| 目标 | 用自然语言对话，让 AI 自动修改内存 |
+| 依赖 | Cheat Engine MCP（`C:\Program Files\Cheat Engine`） |
 
 | 场景  | 用户输入                                                     |
 | ----- | ------------------------------------------------------------ |
@@ -27,7 +36,7 @@ CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普
 - 地址/基址信息输出
 - CLI、API、桌面 UI 三种入口
 
-## 系统架构
+## 架构
 
 ```text
 用户输入
@@ -39,15 +48,18 @@ CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普
   -> 目标进程内存
 ```
 
-主要模块：
+## 目录
 
-- `cheatpilot/tool_agent.py`：LLM tool-use Agent
-- `cheatpilot/executors/ce_mcp.py`：Cheat Engine MCP 执行器
-- `cheatpilot/mcp_client.py`：MCP stdio 客户端
-- `cheatpilot/api.py`：FastAPI 服务入口
-- `cheatpilot/ui.py`：桌面聊天窗口
-- `runtime/ce_mcp/`：项目内置 Cheat Engine MCP 运行文件
-- `scripts/`：启动、检查和初始化脚本
+```text
+cheatpilot/
+  tool_agent.py              LLM tool-use Agent
+  executors/ce_mcp.py        Cheat Engine MCP 执行器
+  mcp_client.py              MCP stdio 客户端
+  api.py                     FastAPI 服务入口
+  ui.py                      桌面聊天窗口
+runtime/ce_mcp/              项目内置 Cheat Engine MCP 运行文件
+scripts/                     启动、检查和初始化脚本
+```
 
 ## 环境要求
 
@@ -58,15 +70,11 @@ CheatPilot 是一个基于自然语言对话的内存修改 Agent。用户用普
 
 ## 安装
 
-```bash
-pip install -e .
-```
+    pip install -e .
 
 初始化 Cheat Engine MCP 运行环境：
 
-```bash
-python scripts\bootstrap_ce_mcp.py
-```
+    python scripts\bootstrap_ce_mcp.py
 
 ## 配置
 
@@ -120,28 +128,20 @@ CHEATPILOT_ALLOW_LUA=0
 
 CLI：
 
-```bash
-python -m cheatpilot "你的自然语言指令"
-```
+    python -m cheatpilot "你的自然语言指令"
 
 桌面 UI：
 
-```bash
-.\scripts\start_ui.ps1
-```
+    .\scripts\start_ui.ps1
 
 API：
 
-```bash
-.\scripts\start_api.ps1
-```
+    .\scripts\start_api.ps1
 
 健康检查和 MCP 检查：
 
-```bash
-python scripts\check_mcp.py
-python scripts\check_llm_tooluse.py
-```
+    python scripts\check_mcp.py
+    python scripts\check_llm_tooluse.py
 
 ## 使用方式
 
@@ -157,9 +157,7 @@ python scripts\check_llm_tooluse.py
 
 ## 测试
 
-```bash
-python -m unittest discover -s tests -v
-```
+    python -m unittest discover -s tests -v
 
 ## 项目状态
 

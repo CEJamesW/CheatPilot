@@ -7,6 +7,7 @@ from uuid import uuid4
 
 
 class ActionType(StrEnum):
+    THINK = "think"
     ATTACH_PROCESS = "attach_process"
     GET_PROCESS_INFO = "get_process_info"
     SESSION_STATUS = "session_status"
@@ -22,6 +23,11 @@ class ActionType(StrEnum):
     WRITE_BYTES = "write_bytes"
     WRITE_STRING = "write_string"
     EVALUATE_LUA = "evaluate_lua"
+    CE_MCP_CALL = "ce_mcp_call"
+    LIST_FILES = "list_files"
+    READ_FILE = "read_file"
+    WRITE_FILE = "write_file"
+    RUN_COMMAND = "run_command"
     EXPLAIN = "explain"
     UNSUPPORTED = "unsupported"
 

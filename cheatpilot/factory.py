@@ -3,6 +3,8 @@ from __future__ import annotations
 from cheatpilot.agent import CheatPilotAgent
 from cheatpilot.config import CheatPilotConfig
 from cheatpilot.executors.ce_mcp import CheatEngineMCPExecutor
+from cheatpilot.executors.composite import CompositeExecutor
+from cheatpilot.executors.local_tools import LocalToolExecutor
 from cheatpilot.planner import HybridPlanner, OpenAICompatiblePlanner, RuleBasedPlanner
 from cheatpilot.tool_agent import ToolUseChatAgent
 
@@ -14,13 +16,14 @@ def build_agent(
 ) -> CheatPilotAgent | ToolUseChatAgent:
     cfg = config or CheatPilotConfig.from_env()
     selected_planner = (planner_name or cfg.planner).lower()
-    executor = CheatEngineMCPExecutor(
+    ce_executor = CheatEngineMCPExecutor(
         command=cfg.mcp_command,
         args=cfg.mcp_args or [],
         allow_lua_actions=cfg.allow_lua_actions,
         value_type=cfg.value_type,
         max_scan_results=cfg.max_scan_results,
     )
+    executor = CompositeExecutor(memory_executor=ce_executor, local_executor=LocalToolExecutor())
 
     if selected_planner in {"llm", "tool", "tooluse", "tool-use"}:
         return ToolUseChatAgent(

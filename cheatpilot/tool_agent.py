@@ -153,7 +153,8 @@ class ToolUseChatAgent:
                 "role": "system",
                 "content": (
                     "请根据本轮用户请求和已经返回的工具结果，用中文给用户一个简洁最终回复。"
-                    "不要再调用工具；如工具结果要求用户继续改变数值，就明确告诉用户下一步要做什么。"
+                    "不要再调用工具；只能基于工具观察到的事实回答，不要凭空捏造。"
+                    "如工具结果要求用户补充当前值、改变数值或继续提供新值，就明确告诉用户下一步要做什么。"
                 ),
             },
         ]
@@ -174,19 +175,21 @@ class ToolUseChatAgent:
     def _system_prompt() -> str:
         return (
             "You are CheatPilot, a natural-language memory modification agent. "
-            "You are the only planner in this product: every user message reaches you first. "
-            "Use tools to inspect and modify memory through Cheat Engine MCP when the user asks for memory work. "
+            "You run an observe-think-act loop. Every user message reaches you first; decide what facts are missing, then either ask the user or call tools. "
+            "Use real tools only: memory operations must go through Cheat Engine MCP, and local file/command work must go through local tools. Never invent tool results. "
             "Reply in Chinese unless the user asks otherwise. "
-            "Treat words such as hook, attach, connect, 打开, 连接, 附加到, and hook住 as requests to call attach_process when a target process or game is named. "
-            "For a numeric value change request, call attach_process when a process is named, "
-            "then scan_exact_value with the current value, then write_value with the desired value, "
-            "and print_base_address when the user asks for address/base address. "
-            "Use process PlantsVsZombies when the user says PVZ or 植物大战僵尸. "
-            "If scan results are not unique, tell the user to change the value in the target program and report the new value; "
-            "when they report the new value, call next_scan using the saved label. "
+            "Use think to record a short operational summary before non-trivial tool work, but keep it concise and action-oriented. "
+            "Treat words such as hook, attach, connect, 打开, 连接, 附加到, and hook住 as requests to call attach_process when a target process is named. "
+            "For numeric memory changes, do not guess the current value. If the user only gives the target value, ask for the current visible value. "
+            "When current value is known, choose a short stable label, then use high-level CheatPilot tools: attach_process if needed, scan_exact_value, write_value, read_value, and print_base_address when requested. "
+            "If scan observations show multiple candidates, ask the user to change that same value in the target process and report the new value; after they report it, use next_scan. "
+            "If exactly one active scan session exists and the user reports only a number, continue that session with next_scan. "
+            "Keep labels consistent across turns. Do not switch between labels for the same value. "
+            "Use ce_mcp_call for low-level Cheat Engine MCP inspection or one-off MCP tools when the high-level tools are not enough. "
             "For reset/status requests, call reset_session/session_status instead of answering from memory. "
             "For string replacement, call scan_string, write_string, then read_string when verification is useful. "
             "For explicit byte patches, call write_bytes only when the user provides an explicit address and byte sequence. "
+            "Use list_files/read_file/write_file/run_command when the user asks you to inspect or edit project files or run commands. "
             "For casual chat or help, answer normally without tools. "
             "Do not claim success unless a tool result confirms it."
         )
@@ -194,6 +197,12 @@ class ToolUseChatAgent:
 
 def tool_schemas() -> list[dict[str, Any]]:
     return [
+        _tool(
+            "think",
+            "Record a concise operational thought and next action before meaningful tool work.",
+            {"thought": {"type": "string"}, "next_action": {"type": "string"}},
+            ["thought"],
+        ),
         _tool("attach_process", "Attach Cheat Engine to a process.", {"process": {"type": "string"}}, ["process"]),
         _tool("get_process_info", "Get attached process information.", {}),
         _tool("session_status", "Show saved scan session status.", {"label": {"type": "string"}}),
@@ -208,7 +217,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             "next_scan",
             "Filter previous scan by a new value.",
             {"label": {"type": "string"}, "value": {"type": "integer"}, "scan_type": {"type": "string"}},
-            ["label", "value"],
+            ["value"],
         ),
         _tool(
             "write_value",
@@ -252,6 +261,47 @@ def tool_schemas() -> list[dict[str, Any]]:
             "Execute benign Cheat Engine Lua automation if enabled by configuration.",
             {"code": {"type": "string"}},
             ["code"],
+        ),
+        _tool(
+            "ce_mcp_call",
+            "Call a raw Cheat Engine MCP tool by name and return its real result.",
+            {"tool_name": {"type": "string"}, "arguments": {"type": "object"}},
+            ["tool_name", "arguments"],
+        ),
+        _tool(
+            "list_files",
+            "List files under a directory for local project inspection.",
+            {
+                "path": {"type": "string"},
+                "pattern": {"type": "string"},
+                "recursive": {"type": "boolean"},
+                "include_hidden": {"type": "boolean"},
+                "limit": {"type": "integer"},
+            },
+        ),
+        _tool(
+            "read_file",
+            "Read a local text file.",
+            {"path": {"type": "string"}, "max_chars": {"type": "integer"}, "encoding": {"type": "string"}},
+            ["path"],
+        ),
+        _tool(
+            "write_file",
+            "Write or append a local text file.",
+            {
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+                "append": {"type": "boolean"},
+                "create_dirs": {"type": "boolean"},
+                "encoding": {"type": "string"},
+            },
+            ["path", "content"],
+        ),
+        _tool(
+            "run_command",
+            "Run a local PowerShell command and return stdout, stderr, and exit code.",
+            {"command": {"type": "string"}, "cwd": {"type": "string"}, "timeout_seconds": {"type": "integer"}},
+            ["command"],
         ),
     ]
 

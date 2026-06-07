@@ -28,6 +28,7 @@ class CheatEngineMCPExecutor:
 
     def __post_init__(self) -> None:
         self._state = self._load_state()
+        self._migrate_state_labels()
 
     def execute(self, action: AgentAction) -> ActionResult:
         try:
@@ -77,6 +78,8 @@ class CheatEngineMCPExecutor:
             return self._write_string(action)
         if action.type == ActionType.EVALUATE_LUA:
             return self._evaluate_lua(action)
+        if action.type == ActionType.CE_MCP_CALL:
+            return self._ce_mcp_call(action)
         if action.type == ActionType.EXPLAIN:
             return ActionResult(action=action, ok=True, message=str(action.arguments.get("text", "")), data={})
         if action.type == ActionType.UNSUPPORTED:
@@ -132,9 +135,15 @@ class CheatEngineMCPExecutor:
         )
 
     def _session_status(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "")
+        raw_label = str(action.arguments.get("label") or "")
+        ambiguous = []
+        label = ""
+        if raw_label:
+            label, ambiguous = self._label_from_action(action, default="", infer=True)
+        if ambiguous:
+            return self._ambiguous_label_result(action, ambiguous)
+        selected = self._get_existing_label_state(label) if label else None
         labels = dict(self._state.get("labels") or {})
-        selected = labels.get(label) if label else None
         pending_count = sum(
             1
             for state in labels.values()
@@ -183,7 +192,7 @@ class CheatEngineMCPExecutor:
         )
 
     def _scan_exact_value(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "value")
+        label = self._label_from_action(action, infer=False)[0]
         value = str(action.arguments["value"])
         value_type = str(action.arguments.get("value_type") or self.value_type)
         self._clear_label_followups(label)
@@ -217,7 +226,9 @@ class CheatEngineMCPExecutor:
         )
 
     def _next_scan(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "value")
+        label, ambiguous = self._label_from_action(action, infer=True)
+        if ambiguous:
+            return self._ambiguous_label_result(action, ambiguous)
         value = str(action.arguments.get("value", ""))
         scan_type = str(action.arguments.get("scan_type") or "exact")
         known_addresses, known_total = self._candidate_info(label)
@@ -273,13 +284,16 @@ class CheatEngineMCPExecutor:
         )
 
     def _write_value(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "value")
         value = int(action.arguments["value"])
         value_type = str(action.arguments.get("value_type") or self.value_type)
         explicit_address = action.arguments.get("address")
         if explicit_address:
+            label = _canonical_label(action.arguments.get("label") or "value")
             address = str(explicit_address)
         else:
+            label, ambiguous = self._label_from_action(action, infer=True)
+            if ambiguous:
+                return self._ambiguous_label_result(action, ambiguous)
             addresses, total = self._candidate_info(label)
             if not addresses:
                 self._remember_pending_write(label, value, value_type)
@@ -332,7 +346,9 @@ class CheatEngineMCPExecutor:
         )
 
     def _print_base_address(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "value")
+        label, ambiguous = self._label_from_action(action, infer=True)
+        if ambiguous:
+            return self._ambiguous_label_result(action, ambiguous)
         addresses, total = self._candidate_info(label)
         address = addresses[0] if len(addresses) == 1 and (total in {None, 1}) else None
         if not address:
@@ -354,7 +370,13 @@ class CheatEngineMCPExecutor:
         )
 
     def _read_value(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "value")
+        explicit_address = action.arguments.get("address")
+        if explicit_address:
+            label = _canonical_label(action.arguments.get("label") or "value")
+        else:
+            label, ambiguous = self._label_from_action(action, infer=True)
+            if ambiguous:
+                return self._ambiguous_label_result(action, ambiguous)
         address = self._resolve_address(action, label)
         value_type = str(action.arguments.get("value_type") or self.value_type)
         result = self._call("read_integer", {"address": address, "type": value_type})
@@ -366,7 +388,7 @@ class CheatEngineMCPExecutor:
         )
 
     def _scan_string(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "string")
+        label = _canonical_label(action.arguments.get("label") or "string")
         value = str(action.arguments["value"])
         wide = bool(action.arguments.get("wide", False))
         limit = int(action.arguments.get("limit") or self.max_scan_results)
@@ -389,7 +411,7 @@ class CheatEngineMCPExecutor:
         )
 
     def _read_string(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "string")
+        label = _canonical_label(action.arguments.get("label") or "string")
         address = self._resolve_address(action, label)
         max_length = int(action.arguments.get("max_length") or 256)
         wide = self._last_string_wide_by_label.get(label, bool(action.arguments.get("wide", False)))
@@ -438,7 +460,7 @@ class CheatEngineMCPExecutor:
         )
 
     def _write_string(self, action: AgentAction) -> ActionResult:
-        label = str(action.arguments.get("label") or "string")
+        label = _canonical_label(action.arguments.get("label") or "string")
         address = self._resolve_address(action, label)
         value = str(action.arguments["value"])
         wide = self._last_string_wide_by_label.get(label, bool(action.arguments.get("wide", False)))
@@ -467,7 +489,23 @@ class CheatEngineMCPExecutor:
             data={"raw": result},
         )
 
+    def _ce_mcp_call(self, action: AgentAction) -> ActionResult:
+        tool_name = str(action.arguments.get("tool_name") or action.arguments.get("name") or "")
+        if not tool_name:
+            raise ValueError("ce_mcp_call requires tool_name")
+        arguments = action.arguments.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise ValueError("ce_mcp_call arguments must be an object")
+        result = self._call(tool_name, arguments)
+        return ActionResult(
+            action=action,
+            ok=not _is_error_result(result),
+            message=f"已调用 Cheat Engine MCP 工具 {tool_name}。",
+            data={"tool_name": tool_name, "arguments": arguments, "raw": result},
+        )
+
     def _resolve_address(self, action: AgentAction, label: str, required: bool = True) -> str | None:
+        label = _canonical_label(label)
         explicit = action.arguments.get("address")
         if explicit:
             return str(explicit)
@@ -481,6 +519,7 @@ class CheatEngineMCPExecutor:
         return None
 
     def _candidate_info(self, label: str) -> tuple[list[str], int | None]:
+        label = _canonical_label(label)
         state = self._label_state(label)
         addresses = self._last_scan_by_label.get(label) or list(state.get("addresses") or [])
         total = state.get("total")
@@ -496,6 +535,7 @@ class CheatEngineMCPExecutor:
         value: str,
         value_type: str,
     ) -> None:
+        label = _canonical_label(label)
         self._last_scan_by_label[label] = addresses
         state = self._label_state(label)
         state.update(
@@ -509,16 +549,19 @@ class CheatEngineMCPExecutor:
         self._save_state()
 
     def _remember_pending_write(self, label: str, value: int, value_type: str) -> None:
+        label = _canonical_label(label)
         state = self._label_state(label)
         state["pending_write"] = {"value": value, "value_type": value_type}
         self._save_state()
 
     def _remember_pending_base(self, label: str) -> None:
+        label = _canonical_label(label)
         state = self._label_state(label)
         state["pending_base"] = True
         self._save_state()
 
     def _clear_label_followups(self, label: str) -> None:
+        label = _canonical_label(label)
         state = self._label_state(label)
         changed = False
         for key in ("pending_write", "pending_base", "final_address", "completed"):
@@ -529,6 +572,7 @@ class CheatEngineMCPExecutor:
             self._save_state()
 
     def _run_pending_followups(self, label: str, addresses: list[str], total: int | None) -> dict[str, Any]:
+        label = _canonical_label(label)
         if len(addresses) != 1 or (total is not None and total != 1):
             return {}
 
@@ -562,8 +606,97 @@ class CheatEngineMCPExecutor:
         return followup
 
     def _label_state(self, label: str) -> dict[str, Any]:
+        label = _canonical_label(label)
+        self._merge_label_aliases(label)
         labels = self._state.setdefault("labels", {})
         return labels.setdefault(label, {})
+
+    def _get_existing_label_state(self, label: str) -> dict[str, Any] | None:
+        label = _canonical_label(label)
+        self._merge_label_aliases(label)
+        labels = self._state.setdefault("labels", {})
+        state = labels.get(label)
+        return state if isinstance(state, dict) else None
+
+    def _label_from_action(self, action: AgentAction, default: str = "value", infer: bool = False) -> tuple[str, list[str]]:
+        requested = _canonical_label(action.arguments.get("label") or default)
+        if infer and _is_placeholder_label(requested):
+            active_labels = self._active_labels()
+            if len(active_labels) == 1:
+                return active_labels[0], []
+            if len(active_labels) > 1:
+                return requested, active_labels
+        return requested, []
+
+    def _active_labels(self) -> list[str]:
+        self._migrate_state_labels()
+        labels = self._state.get("labels") or {}
+        active: list[str] = []
+        seen: set[str] = set()
+        for label, state in labels.items():
+            canonical = _canonical_label(label)
+            if canonical in seen:
+                continue
+            if isinstance(state, dict) and _label_state_is_active(state):
+                active.append(canonical)
+                seen.add(canonical)
+        for label, addresses in self._last_scan_by_label.items():
+            canonical = _canonical_label(label)
+            if canonical not in seen and addresses:
+                active.append(canonical)
+                seen.add(canonical)
+        return active
+
+    def _ambiguous_label_result(self, action: AgentAction, labels: list[str]) -> ActionResult:
+        label_text = "、".join(labels)
+        return ActionResult(
+            action=action,
+            ok=False,
+            message=f"当前有多个扫描会话：{label_text}。请说明要继续哪个数值，例如：现在{labels[0]}是新的数值。",
+            data={
+                "ambiguous_labels": labels,
+                "next_step": f"请带上标签继续，例如：现在{labels[0]}是新的数值。",
+            },
+        )
+
+    def _migrate_state_labels(self) -> None:
+        labels = self._state.get("labels")
+        if not isinstance(labels, dict):
+            return
+        for label in list(labels.keys()):
+            self._merge_label_aliases(_canonical_label(label))
+
+    def _merge_label_aliases(self, canonical: str) -> None:
+        canonical = _canonical_label(canonical)
+        labels = self._state.setdefault("labels", {})
+        changed = False
+        for label in list(labels.keys()):
+            if label == canonical or _canonical_label(label) != canonical:
+                continue
+            source = labels.pop(label)
+            target = labels.setdefault(canonical, {})
+            if isinstance(target, dict) and isinstance(source, dict):
+                _merge_label_state(target, source)
+            changed = True
+
+        for label in list(self._last_scan_by_label.keys()):
+            if label == canonical or _canonical_label(label) != canonical:
+                continue
+            addresses = self._last_scan_by_label.pop(label)
+            current = self._last_scan_by_label.get(canonical)
+            if not current or (addresses and len(addresses) <= len(current)):
+                self._last_scan_by_label[canonical] = addresses
+            changed = True
+
+        for label in list(self._last_string_wide_by_label.keys()):
+            if label == canonical or _canonical_label(label) != canonical:
+                continue
+            wide = self._last_string_wide_by_label.pop(label)
+            self._last_string_wide_by_label.setdefault(canonical, wide)
+            changed = True
+
+        if changed:
+            self._save_state()
 
     def _load_state(self) -> dict[str, Any]:
         try:
@@ -665,12 +798,119 @@ def _process_name_variants(value: str) -> set[str]:
     return {item for item in variants if item}
 
 
+_LABEL_ALIASES = {
+    "sun": "阳光",
+    "sunlight": "阳光",
+    "sunshine": "阳光",
+    "太阳": "阳光",
+    "阳光": "阳光",
+    "coin": "金币",
+    "coins": "金币",
+    "gold": "金币",
+    "money": "金币",
+    "cash": "金币",
+    "金币": "金币",
+    "金钱": "金币",
+    "钱": "金币",
+    "hp": "血量",
+    "health": "血量",
+    "life": "血量",
+    "lives": "血量",
+    "血量": "血量",
+    "生命": "血量",
+    "score": "分数",
+    "scores": "分数",
+    "point": "分数",
+    "points": "分数",
+    "分数": "分数",
+    "积分": "分数",
+    "ammo": "弹药",
+    "bullet": "弹药",
+    "bullets": "弹药",
+    "弹药": "弹药",
+    "子弹": "弹药",
+    "exp": "经验",
+    "xp": "经验",
+    "experience": "经验",
+    "经验": "经验",
+}
+
+_PLACEHOLDER_LABELS = {
+    "",
+    "value",
+    "current",
+    "current_value",
+    "target",
+    "target_value",
+    "unknown",
+    "数值",
+    "当前值",
+    "目标值",
+    "变量",
+}
+
+
+def _canonical_label(value: Any) -> str:
+    text = str(value or "").strip().strip("，。,. 的")
+    if not text:
+        return "value"
+    lowered = text.lower()
+    alias = _LABEL_ALIASES.get(lowered) or _LABEL_ALIASES.get(text)
+    if alias:
+        return alias
+    if lowered in _PLACEHOLDER_LABELS:
+        return lowered
+    return text
+
+
+def _is_placeholder_label(label: str) -> bool:
+    return _canonical_label(label).lower() in _PLACEHOLDER_LABELS
+
+
+def _label_state_is_active(state: dict[str, Any]) -> bool:
+    addresses = state.get("addresses")
+    return bool(
+        state.get("pending_write")
+        or state.get("pending_base")
+        or state.get("final_address")
+        or (isinstance(addresses, list) and addresses)
+    )
+
+
+def _merge_label_state(target: dict[str, Any], source: dict[str, Any]) -> None:
+    source_addresses = list(source.get("addresses") or [])
+    target_addresses = list(target.get("addresses") or [])
+    source_total = source.get("total")
+    target_total = target.get("total")
+    source_wins = source_addresses and (
+        not target_addresses
+        or _candidate_rank(source_total, len(source_addresses)) < _candidate_rank(target_total, len(target_addresses))
+    )
+    if source_wins:
+        target["addresses"] = source_addresses
+        target["total"] = source_total if isinstance(source_total, int) else len(source_addresses)
+        for key in ("last_value", "value_type", "final_address", "completed"):
+            if key in source:
+                target[key] = source[key]
+    elif not target_addresses:
+        for key in ("last_value", "value_type", "final_address", "completed"):
+            if key in source and key not in target:
+                target[key] = source[key]
+    for key in ("pending_write", "pending_base"):
+        if source.get(key):
+            target[key] = source[key]
+
+
+def _candidate_rank(total: Any, visible_count: int) -> int:
+    return total if isinstance(total, int) else visible_count
+
+
 def _next_step_for_candidates(label: str, total: int | None, visible_count: int) -> str | None:
     if visible_count == 0 and not total:
         return f"没有找到 {label} 候选。请确认 Cheat Engine 已附加到正确进程，并重新告诉我当前{label}值。"
     if visible_count == 1 and (total in {None, 1}):
         return None
-    return f"请在游戏里让{label}变化一次，然后告诉我新的{label}数值，例如：现在{label}是50了。"
+    return f"请在目标程序里让{label}变化一次，然后告诉我新的{label}数值，例如：现在{label}是50了。"
 
 
 def _collect_address_strings(value: Any, output: list[str]) -> None:
