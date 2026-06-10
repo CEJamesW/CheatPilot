@@ -287,7 +287,7 @@ def tool_schemas() -> list[dict[str, Any]]:
         _tool(
             "write_bytes",
             "Write raw bytes to an explicit address. The bytes field can be a hex string such as '90 90' or an integer array.",
-            {"address": {"type": "string"}, "bytes": {"type": "string"}},
+            {"address": {"type": "string"}, "bytes": _byte_sequence_schema()},
             ["address", "bytes"],
         ),
         _tool(
@@ -376,6 +376,15 @@ def _tool(name: str, description: str, properties: dict[str, dict[str, Any]], re
 
 def _numeric_value_schema() -> dict[str, Any]:
     return {"anyOf": [{"type": "integer"}, {"type": "number"}, {"type": "string"}]}
+
+
+def _byte_sequence_schema() -> dict[str, Any]:
+    return {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}},
+        ]
+    }
 
 
 def _action_from_tool_call(name: str, arguments: dict[str, Any]) -> AgentAction:

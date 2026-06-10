@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from cheatpilot.config import DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS
 from cheatpilot.models import ActionResult, ActionType
-from cheatpilot.tool_agent import ToolUseChatAgent, _is_retryable_http_error, _retry_delay_seconds
+from cheatpilot.tool_agent import ToolUseChatAgent, _is_retryable_http_error, _retry_delay_seconds, tool_schemas
 
 
 class RecordingExecutor:
@@ -124,6 +124,15 @@ class ToolUseChatAgentTest(unittest.TestCase):
 
         self.assertEqual(agent.max_tool_rounds, DEFAULT_MAX_TOOL_ROUNDS)
         self.assertEqual(agent.max_history_messages, DEFAULT_MAX_HISTORY_MESSAGES)
+
+    def test_write_bytes_schema_accepts_hex_string_or_integer_array(self) -> None:
+        write_bytes = next(tool for tool in tool_schemas() if tool["function"]["name"] == "write_bytes")
+        bytes_schema = write_bytes["function"]["parameters"]["properties"]["bytes"]
+
+        self.assertEqual(bytes_schema["anyOf"][0]["type"], "string")
+        self.assertEqual(bytes_schema["anyOf"][1]["type"], "array")
+        self.assertEqual(bytes_schema["anyOf"][1]["items"]["minimum"], 0)
+        self.assertEqual(bytes_schema["anyOf"][1]["items"]["maximum"], 255)
 
     def test_llm_tool_calls_execute_actions(self) -> None:
         executor = RecordingExecutor()
