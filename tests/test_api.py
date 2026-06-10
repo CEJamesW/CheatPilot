@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
 
 from cheatpilot import api
 from cheatpilot.models import ActionResult, ActionType, AgentAction, AgentPlan, AgentResponse
@@ -21,12 +24,28 @@ class RecordingExecutor:
         return ActionResult(action=action, ok=True, message=f"ran {action.type.value}", data={})
 
 
+class FakeChatAgent:
+    def __init__(self) -> None:
+        self.messages = []
+
+    def handle(self, message: str) -> AgentResponse:
+        self.messages.append(message)
+        action = AgentAction(type=ActionType.EXPLAIN, arguments={"text": "普通回复"}, reason="test")
+        return AgentResponse(
+            plan=AgentPlan.create(original_message=message, actions=[action], summary="test"),
+            results=[ActionResult(action=action, ok=True, message="普通回复", data={})],
+            assistant_message="普通回复",
+        )
+
+
 class ApiSessionOwnerTest(unittest.TestCase):
     def setUp(self) -> None:
         api._ce_session_owner = None
+        api._agents.clear()
 
     def tearDown(self) -> None:
         api._ce_session_owner = None
+        api._agents.clear()
 
     def test_failed_ce_action_does_not_claim_owner(self) -> None:
         api._update_ce_session_owner("s1", response_for(ActionType.ATTACH_PROCESS, ok=False))
@@ -90,6 +109,21 @@ class ApiSessionOwnerTest(unittest.TestCase):
 
         self.assertTrue(result.ok)
         self.assertEqual(inner.actions, [action])
+
+    def test_chat_endpoint_does_not_block_plain_agent_reply_when_ce_owned_elsewhere(self) -> None:
+        api._ce_session_owner = "s1"
+        agent = FakeChatAgent()
+        client = TestClient(api.app)
+
+        with patch("cheatpilot.api.build_agent", return_value=agent):
+            response = client.post("/chat", json={"session_id": "s2", "message": "你好"})
+
+        payload = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reply"], "普通回复")
+        self.assertEqual(payload["ce_session_owner"], "s1")
+        self.assertEqual(agent.messages, ["你好"])
 
 
 if __name__ == "__main__":

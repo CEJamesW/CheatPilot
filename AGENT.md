@@ -96,6 +96,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Scan state no longer turns a single preview address into a confirmed unique CE match when total count is unknown.
 - [x] Direct `ToolUseChatAgent` construction now uses the same default loop depth/history window as `.env` configuration.
 - [x] API CE session ownership is now enforced at CE-action execution time, so ordinary chat/local tools are not blocked by another session's CE backend ownership.
+- [x] API `/chat` regression coverage confirms ordinary messages still reach the Agent when another session owns the CE backend.
 
 ## Live Results So Far
 
