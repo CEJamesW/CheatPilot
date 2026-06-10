@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from cheatpilot.agent import CheatPilotAgent
 from cheatpilot.config import CheatPilotConfig
 from cheatpilot.executors.ce_mcp import CheatEngineMCPExecutor
@@ -13,6 +15,7 @@ def build_agent(
     *,
     planner_name: str | None = None,
     config: CheatPilotConfig | None = None,
+    state_path: Path | None = None,
 ) -> CheatPilotAgent | ToolUseChatAgent:
     cfg = config or CheatPilotConfig.from_env()
     selected_planner = (planner_name or cfg.planner).lower()
@@ -23,6 +26,7 @@ def build_agent(
         value_type=cfg.value_type,
         max_scan_results=cfg.max_scan_results,
         timeout_seconds=cfg.mcp_timeout_seconds,
+        **({"state_path": state_path} if state_path is not None else {}),
     )
     executor = CompositeExecutor(memory_executor=ce_executor, local_executor=LocalToolExecutor())
 
