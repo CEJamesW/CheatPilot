@@ -9,6 +9,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from cheatpilot.config import DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS
 from cheatpilot.executors.base import MemoryExecutor
 from cheatpilot.models import ActionResult, ActionType, AgentAction, AgentPlan, AgentResponse
 
@@ -23,8 +24,8 @@ class ToolUseChatAgent:
     model: str
     timeout_seconds: float = 8.0
     max_retries: int = 3
-    max_tool_rounds: int = 6
-    max_history_messages: int = 12
+    max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
+    max_history_messages: int = DEFAULT_MAX_HISTORY_MESSAGES
     _conversation: list[dict[str, str]] = field(default_factory=list, init=False, repr=False)
     _handle_lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
 

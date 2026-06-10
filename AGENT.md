@@ -94,6 +94,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Malformed LLM Chat Completions responses now produce clear runtime errors instead of raw `KeyError`/`IndexError` crashes.
 - [x] Malformed LLM response errors now surface as user-facing Chat Completions compatibility guidance in CLI/API/UI.
 - [x] Scan state no longer turns a single preview address into a confirmed unique CE match when total count is unknown.
+- [x] Direct `ToolUseChatAgent` construction now uses the same default loop depth/history window as `.env` configuration.
 
 ## Live Results So Far
 

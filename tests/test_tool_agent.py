@@ -2,6 +2,7 @@ import unittest
 import urllib.error
 from unittest.mock import patch
 
+from cheatpilot.config import DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_MAX_TOOL_ROUNDS
 from cheatpilot.models import ActionResult, ActionType
 from cheatpilot.tool_agent import ToolUseChatAgent, _is_retryable_http_error, _retry_delay_seconds
 
@@ -117,6 +118,13 @@ class MalformedResponseAgent(ToolUseChatAgent):
 
 
 class ToolUseChatAgentTest(unittest.TestCase):
+    def test_direct_defaults_match_configured_runtime_defaults(self) -> None:
+        executor = RecordingExecutor()
+        agent = ToolUseChatAgent(executor=executor, base_url="http://fake/v1", api_key="key", model="fake")
+
+        self.assertEqual(agent.max_tool_rounds, DEFAULT_MAX_TOOL_ROUNDS)
+        self.assertEqual(agent.max_history_messages, DEFAULT_MAX_HISTORY_MESSAGES)
+
     def test_llm_tool_calls_execute_actions(self) -> None:
         executor = RecordingExecutor()
         response = FakeToolAgent(executor).handle("请用工具处理这个复杂内存任务")
