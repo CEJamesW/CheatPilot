@@ -78,6 +78,41 @@ def sessions() -> dict[str, Any]:
         return {"sessions": sorted(_agents.keys()), "ce_session_owner": _ce_session_owner}
 
 
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: str) -> dict[str, Any]:
+    global _ce_session_owner
+    normalized = _normalize_session_id(session_id)
+    with _session_lock:
+        agent = _agents.pop(normalized, None)
+        if agent is not None:
+            _close_agent_client(agent)
+        state_path = _session_state_path(normalized)
+        removed_state = False
+        if state_path.exists():
+            state_path.unlink()
+            removed_state = True
+        if _ce_session_owner == normalized:
+            _ce_session_owner = None
+        return {
+            "ok": True,
+            "session_id": normalized,
+            "removed_agent": agent is not None,
+            "removed_state": removed_state,
+            "ce_session_owner": _ce_session_owner,
+        }
+
+
+@app.post("/sessions/{session_id}/release-ce")
+def release_ce_session(session_id: str) -> dict[str, Any]:
+    global _ce_session_owner
+    normalized = _normalize_session_id(session_id)
+    with _session_lock:
+        released = _ce_session_owner == normalized
+        if released:
+            _ce_session_owner = None
+        return {"ok": True, "session_id": normalized, "released": released, "ce_session_owner": _ce_session_owner}
+
+
 def _get_session_agent(session_id: str) -> Any:
     with _session_lock:
         agent = _agents.get(session_id)

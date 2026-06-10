@@ -41,6 +41,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] FastAPI entry point implemented.
 - [x] FastAPI `/chat` now accepts optional `session_id` and keeps separate Agent/history/state files per API session.
 - [x] FastAPI now tracks the single CE MCP backend owner across API sessions and blocks accidental cross-session scan/attach/write interleaving unless `takeover_ce_session=true` is explicit.
+- [x] FastAPI session management endpoints added: `/sessions`, `DELETE /sessions/{session_id}`, and `POST /sessions/{session_id}/release-ce`.
 - [x] Topmost desktop chat window implemented.
 - [x] Shared user-facing response formatter added.
 - [x] PVZ alias handling added: `植物大战僵尸` and `PVZ` map to `PlantsVsZombies`.
