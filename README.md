@@ -81,7 +81,13 @@ python scripts\bootstrap_ce_mcp.py
 
 ## 配置
 
-复制 `.env.example` 为 `.env`，并填写实际配置：
+复制 `.env.example` 为 `.env`：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+填写实际配置：
 
 ```env
 # 示例：https://api.openai.com/v1
