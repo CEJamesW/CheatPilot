@@ -8,3 +8,6 @@ __pycache__/
 *.log
 *.lnk
 runtime/session_state.json
+runtime/api_sessions/
+runtime/**/__pycache__/
+scripts/**/__pycache__/

@@ -877,9 +877,10 @@ def _extract_total_count(result: Any) -> int | None:
 
 def _friendly_error(message: str) -> str:
     if "Pipe not found" in message or "CE_MCP_Bridge" in message:
+        bridge_path = PROJECT_ROOT / "runtime" / "ce_mcp" / "ce_mcp_bridge.lua"
         return (
             f"{message}. Start Cheat Engine, execute "
-            r"C:\Users\Administrator\Desktop\CheatPilot\runtime\ce_mcp\ce_mcp_bridge.lua, "
+            f"{bridge_path}, "
             "and close other MCP clients if the bridge pipe is already occupied."
         )
     return message

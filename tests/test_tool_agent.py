@@ -86,6 +86,28 @@ class ResetToolFakeAgent(ToolUseChatAgent):
         return {"choices": [{"message": {"role": "assistant", "content": "已让工具清空会话。"}}]}
 
 
+class LegacyFunctionCallAgent(ToolUseChatAgent):
+    def __init__(self, executor):
+        super().__init__(executor=executor, base_url="http://fake/v1", api_key="key", model="fake")
+        self.calls = 0
+
+    def _chat(self, messages, *, tools=None):
+        self.calls += 1
+        if self.calls == 1:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "function_call": {"name": "session_status", "arguments": '{"label":"金币"}'},
+                        }
+                    }
+                ]
+            }
+        return {"choices": [{"message": {"role": "assistant", "content": "旧格式工具调用完成。"}}]}
+
+
 class ToolUseChatAgentTest(unittest.TestCase):
     def test_llm_tool_calls_execute_actions(self) -> None:
         executor = RecordingExecutor()
@@ -112,6 +134,15 @@ class ToolUseChatAgentTest(unittest.TestCase):
 
         self.assertEqual([action.type for action in executor.actions], [ActionType.RESET_SESSION])
         self.assertEqual(response.assistant_message, "已让工具清空会话。")
+
+    def test_legacy_function_call_executes_action(self) -> None:
+        executor = RecordingExecutor()
+        response = LegacyFunctionCallAgent(executor).handle("查看金币扫描状态")
+
+        self.assertTrue(response.ok)
+        self.assertEqual([action.type for action in executor.actions], [ActionType.SESSION_STATUS])
+        self.assertEqual(response.plan.actions[0].arguments["label"], "金币")
+        self.assertEqual(response.assistant_message, "旧格式工具调用完成。")
 
     def test_http_429_is_retryable(self) -> None:
         error = urllib.error.HTTPError("http://fake/v1/chat/completions", 429, "Too Many Requests", {}, None)

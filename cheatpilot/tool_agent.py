@@ -54,9 +54,9 @@ class ToolUseChatAgent:
                     raise
                 assistant_message = _fallback_assistant_message(results, exc)
                 break
-            choice = dict(response["choices"][0]["message"])
+            choice = _normalize_assistant_message(dict(response["choices"][0]["message"]))
             messages.append(choice)
-            tool_calls = _normalize_tool_calls(choice.get("tool_calls"))
+            tool_calls = _normalize_tool_calls(choice)
             if not tool_calls:
                 assistant_message = str(choice.get("content") or "我已处理完这轮请求。")
                 if not actions:
@@ -400,11 +400,51 @@ def _parse_tool_arguments(raw_args: Any) -> tuple[dict[str, Any], str | None]:
 def _normalize_tool_calls(value: Any) -> list[dict[str, Any]]:
     if not value:
         return []
+    if isinstance(value, dict) and ("tool_calls" in value or "function_call" in value):
+        calls = _normalize_tool_calls(value.get("tool_calls"))
+        if calls:
+            return calls
+        function_call = value.get("function_call")
+        if isinstance(function_call, dict) and function_call.get("name"):
+            return [
+                {
+                    "id": "legacy_function_call",
+                    "type": "function",
+                    "function": {
+                        "name": function_call.get("name"),
+                        "arguments": function_call.get("arguments") or "{}",
+                    },
+                }
+            ]
+        return []
     if isinstance(value, dict):
-        return [value]
+        if not isinstance(value.get("function"), dict):
+            return []
+        call = dict(value)
+        if not call.get("id"):
+            call["id"] = "tool_call_1"
+        return [call]
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
+        calls: list[dict[str, Any]] = []
+        for index, item in enumerate(value):
+            for call in _normalize_tool_calls(item):
+                if call.get("id") == "tool_call_1":
+                    call["id"] = f"tool_call_{index + 1}"
+                calls.append(call)
+        return calls
     return []
+
+
+def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
+    if message.get("tool_calls") or not isinstance(message.get("function_call"), dict):
+        return message
+    tool_calls = _normalize_tool_calls({"function_call": message.get("function_call")})
+    if not tool_calls:
+        return message
+    normalized = dict(message)
+    normalized["tool_calls"] = tool_calls
+    normalized.pop("function_call", None)
+    return normalized
 
 
 def _fallback_assistant_message(results: list[ActionResult], exc: Exception) -> str:

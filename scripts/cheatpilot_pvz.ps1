@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
-Set-Location -LiteralPath "C:\Users\Administrator\Desktop\CheatPilot"
+$projectRoot = Split-Path -Parent $PSScriptRoot
+Set-Location -LiteralPath $projectRoot
 
 $message = $args -join " "
 if ([string]::IsNullOrWhiteSpace($message)) {

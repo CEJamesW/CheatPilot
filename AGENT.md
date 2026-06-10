@@ -81,6 +81,11 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] `run_command` now supports selectable `powershell`, `pwsh`, `cmd`, `bash`, and `sh` shells while keeping PowerShell as the default.
 - [x] High-level numeric tools now accept integer, float, and string numeric values; `float`/`double` value types are preserved across scan/write/readback.
 - [x] The vendored Cheat Engine MCP wrapper now exposes `write_integer` as `int | float`, matching the Lua bridge's real float/double support.
+- [x] Startup scripts now resolve the project root from their own location instead of hardcoding a desktop path.
+- [x] CE MCP bootstrap now falls back to the vendored `vendor/cheatengine-mcp-bridge/MCP_Server` files when runtime files are missing.
+- [x] Runtime API session state and generated Python caches are ignored by git.
+- [x] Cheat Engine bridge error guidance now prints the current project's runtime bridge path instead of a machine-specific path.
+- [x] Tool-use agent now accepts both standard `tool_calls` and legacy OpenAI-compatible `function_call` responses.
 
 ## Live Results So Far
 

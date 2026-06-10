@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE_DIR = Path(r"D:\MCP\cheatengine-mcp-bridge\MCP_Server")
+VENDORED_SOURCE_DIR = ROOT / "vendor" / "cheatengine-mcp-bridge" / "MCP_Server"
 RUNTIME_DIR = ROOT / "runtime" / "ce_mcp"
 CHEAT_ENGINE_AUTORUN = Path(r"C:\Program Files\Cheat Engine\autorun")
 DEFAULT_PIPE_NAME = "CE_MCP_Bridge_CheatPilot"
@@ -18,12 +18,17 @@ def build_runtime(pipe_name: str, source_dir: Path | None = None) -> tuple[Path,
     lua_target = RUNTIME_DIR / "ce_mcp_bridge.lua"
     py_target = RUNTIME_DIR / "mcp_cheatengine.py"
 
+    if source_dir is None and (not lua_target.exists() or not py_target.exists()) and VENDORED_SOURCE_DIR.exists():
+        source_dir = VENDORED_SOURCE_DIR
+
     if source_dir is not None:
         if not source_dir.exists():
             raise FileNotFoundError(f"source MCP server directory not found: {source_dir}")
         lua_source = source_dir / "ce_mcp_bridge.lua"
         py_source = source_dir / "mcp_cheatengine.py"
         requirements_source = source_dir / "requirements.txt"
+        if not lua_source.exists() or not py_source.exists():
+            raise FileNotFoundError(f"source MCP server files are missing in: {source_dir}")
         lua_text = lua_source.read_text(encoding="utf-8")
         py_text = py_source.read_text(encoding="utf-8")
         if requirements_source.exists():
@@ -31,7 +36,8 @@ def build_runtime(pipe_name: str, source_dir: Path | None = None) -> tuple[Path,
     else:
         if not lua_target.exists() or not py_target.exists():
             raise FileNotFoundError(
-                "runtime CE MCP files are missing; pass --source-dir with a cheatengine-mcp-bridge MCP_Server path"
+                "runtime CE MCP files are missing and vendored MCP_Server files were not found; "
+                "pass --source-dir with a cheatengine-mcp-bridge MCP_Server path"
             )
         lua_text = lua_target.read_text(encoding="utf-8")
         py_text = py_target.read_text(encoding="utf-8")
@@ -111,7 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-dir",
         type=Path,
         default=None,
-        help=f"Optional MCP_Server source directory. Defaults to existing runtime files; common local source: {DEFAULT_SOURCE_DIR}",
+        help=(
+            "Optional MCP_Server source directory. Defaults to existing runtime files. "
+            f"Vendored source path: {VENDORED_SOURCE_DIR}"
+        ),
     )
     parser.add_argument("--no-autoload", action="store_true")
     return parser
