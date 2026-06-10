@@ -113,7 +113,7 @@ Copy-Item .env.example .env
 
 `.env` 可填写项：
 
-```bash
+```env
 # LLM 服务地址。填写 OpenAI-compatible API base URL。
 # 示例：https://api.openai.com/v1
 CHEATPILOT_LLM_BASE_URL=
