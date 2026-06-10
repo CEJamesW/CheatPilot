@@ -54,7 +54,7 @@ class ToolUseChatAgent:
                     raise
                 assistant_message = _fallback_assistant_message(results, exc)
                 break
-            choice = _normalize_assistant_message(dict(response["choices"][0]["message"]))
+            choice = _normalize_assistant_message(_assistant_message_from_response(response))
             messages.append(choice)
             tool_calls = _normalize_tool_calls(choice)
             if not tool_calls:
@@ -160,7 +160,12 @@ class ToolUseChatAgent:
         for attempt in range(self.max_retries + 1):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                    return dict(json.loads(response.read().decode("utf-8")))
+                    decoded = json.loads(response.read().decode("utf-8"))
+                    if not isinstance(decoded, dict):
+                        raise RuntimeError(f"LLM 返回格式无效：期望 JSON object，实际 {type(decoded).__name__}")
+                    return decoded
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"LLM 返回不是合法 JSON：{exc.msg} at char {exc.pos}") from exc
             except urllib.error.HTTPError as exc:
                 if not _is_retryable_http_error(exc) or attempt >= self.max_retries:
                     raise RuntimeError(f"LLM tool-use request failed: {exc}") from exc
@@ -184,7 +189,7 @@ class ToolUseChatAgent:
             },
         ]
         response = self._chat(final_messages)
-        choice = dict(response["choices"][0]["message"])
+        choice = _assistant_message_from_response(response)
         return str(choice.get("content") or "工具调用已完成，但模型没有返回最终文本。")
 
     def _history_messages(self) -> list[dict[str, str]]:
@@ -395,6 +400,21 @@ def _parse_tool_arguments(raw_args: Any) -> tuple[dict[str, Any], str | None]:
     if not isinstance(parsed, dict):
         return {}, f"arguments must decode to a JSON object, got {type(parsed).__name__}"
     return parsed, None
+
+
+def _assistant_message_from_response(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        raise RuntimeError(f"LLM 返回格式无效：期望 object，实际 {type(response).__name__}")
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("LLM 返回格式无效：缺少 choices[0].message")
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        raise RuntimeError(f"LLM 返回格式无效：choices[0] 应为 object，实际 {type(first_choice).__name__}")
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("LLM 返回格式无效：缺少 choices[0].message")
+    return dict(message)
 
 
 def _normalize_tool_calls(value: Any) -> list[dict[str, Any]]:

@@ -38,6 +38,8 @@ def build_agent(
             model=cfg.llm_model,
             timeout_seconds=cfg.llm_timeout_seconds,
             max_retries=cfg.llm_max_retries,
+            max_tool_rounds=cfg.max_tool_rounds,
+            max_history_messages=cfg.max_history_messages,
         )
     if selected_planner == "hybrid":
         planner = HybridPlanner(

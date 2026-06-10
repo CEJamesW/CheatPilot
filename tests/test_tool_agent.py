@@ -108,6 +108,14 @@ class LegacyFunctionCallAgent(ToolUseChatAgent):
         return {"choices": [{"message": {"role": "assistant", "content": "旧格式工具调用完成。"}}]}
 
 
+class MalformedResponseAgent(ToolUseChatAgent):
+    def __init__(self, executor):
+        super().__init__(executor=executor, base_url="http://fake/v1", api_key="key", model="fake")
+
+    def _chat(self, messages, *, tools=None):
+        return {}
+
+
 class ToolUseChatAgentTest(unittest.TestCase):
     def test_llm_tool_calls_execute_actions(self) -> None:
         executor = RecordingExecutor()
@@ -143,6 +151,13 @@ class ToolUseChatAgentTest(unittest.TestCase):
         self.assertEqual([action.type for action in executor.actions], [ActionType.SESSION_STATUS])
         self.assertEqual(response.plan.actions[0].arguments["label"], "金币")
         self.assertEqual(response.assistant_message, "旧格式工具调用完成。")
+
+    def test_malformed_llm_response_reports_clear_error(self) -> None:
+        executor = RecordingExecutor()
+        agent = MalformedResponseAgent(executor)
+
+        with self.assertRaisesRegex(RuntimeError, "缺少 choices\\[0\\]\\.message"):
+            agent.handle("你好")
 
     def test_http_429_is_retryable(self) -> None:
         error = urllib.error.HTTPError("http://fake/v1/chat/completions", 429, "Too Many Requests", {}, None)

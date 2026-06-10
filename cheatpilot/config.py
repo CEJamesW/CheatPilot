@@ -12,6 +12,8 @@ DEFAULT_LLM_BASE_URL = "https://ai.saurlax.com/v1"
 DEFAULT_LLM_MODEL = "mimo-v2.5-pro"
 DEFAULT_LLM_TIMEOUT_SECONDS = 45.0
 DEFAULT_LLM_MAX_RETRIES = 3
+DEFAULT_MAX_TOOL_ROUNDS = 10
+DEFAULT_MAX_HISTORY_MESSAGES = 24
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MCP_COMMAND = sys.executable
 DEFAULT_MCP_ARGS = [str(PROJECT_ROOT / "runtime" / "ce_mcp" / "mcp_cheatengine.py")]
@@ -25,6 +27,8 @@ class CheatPilotConfig:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_timeout_seconds: float = DEFAULT_LLM_TIMEOUT_SECONDS
     llm_max_retries: int = DEFAULT_LLM_MAX_RETRIES
+    max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
+    max_history_messages: int = DEFAULT_MAX_HISTORY_MESSAGES
     planner: str = "llm"
     mcp_command: str = DEFAULT_MCP_COMMAND
     mcp_args: list[str] | None = None
@@ -42,6 +46,8 @@ class CheatPilotConfig:
             llm_model=os.getenv("CHEATPILOT_LLM_MODEL", DEFAULT_LLM_MODEL),
             llm_timeout_seconds=_parse_float(os.getenv("CHEATPILOT_LLM_TIMEOUT_SECONDS"), DEFAULT_LLM_TIMEOUT_SECONDS),
             llm_max_retries=_parse_int(os.getenv("CHEATPILOT_LLM_MAX_RETRIES"), DEFAULT_LLM_MAX_RETRIES),
+            max_tool_rounds=_parse_positive_int(os.getenv("CHEATPILOT_MAX_TOOL_ROUNDS"), DEFAULT_MAX_TOOL_ROUNDS),
+            max_history_messages=_parse_positive_int(os.getenv("CHEATPILOT_MAX_HISTORY_MESSAGES"), DEFAULT_MAX_HISTORY_MESSAGES),
             planner=os.getenv("CHEATPILOT_PLANNER", "llm").lower(),
             mcp_command=os.getenv("CHEATPILOT_MCP_COMMAND", DEFAULT_MCP_COMMAND),
             mcp_args=_normalize_mcp_args(_parse_args(os.getenv("CHEATPILOT_MCP_ARGS"), DEFAULT_MCP_ARGS)),
@@ -100,6 +106,11 @@ def _parse_int(value: str | None, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+def _parse_positive_int(value: str | None, default: int) -> int:
+    parsed = _parse_int(value, default)
+    return parsed if parsed > 0 else default
 
 
 def _parse_float(value: str | None, default: float) -> float:

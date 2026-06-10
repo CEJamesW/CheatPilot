@@ -90,6 +90,8 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] CLI now supports a persistent interactive chat mode for multi-turn scan/filter/write conversations.
 - [x] API CE backend ownership now changes only after successful CE actions, so failed attach/scan attempts do not leave a session falsely occupying the backend.
 - [x] README command/config examples now use explicit GitHub code fences such as `bash` and `powershell`.
+- [x] Tool-use Agent loop depth and conversation history window are now configurable through `.env`.
+- [x] Malformed LLM Chat Completions responses now produce clear runtime errors instead of raw `KeyError`/`IndexError` crashes.
 
 ## Live Results So Far
 
