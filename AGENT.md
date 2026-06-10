@@ -98,6 +98,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] API CE session ownership is now enforced at CE-action execution time, so ordinary chat/local tools are not blocked by another session's CE backend ownership.
 - [x] API `/chat` regression coverage confirms ordinary messages still reach the Agent when another session owns the CE backend.
 - [x] `write_bytes` tool schema now matches executor behavior by accepting either a hex string or an integer byte array.
+- [x] Numeric scan/write/read now preserve or infer decimal value types when the LLM omits `value_type`, so float-like conversations do not fall back to `dword`.
 
 ## Live Results So Far
 

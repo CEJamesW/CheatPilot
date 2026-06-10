@@ -25,6 +25,19 @@ class StaticExecutor:
         return self.results.pop(0)
 
 
+class RecordingMCPExecutor(CheatEngineMCPExecutor):
+    def __init__(self, *args, responses=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.calls = []
+        self.responses = list(responses or [])
+
+    def _call(self, tool_name, arguments):
+        self.calls.append((tool_name, arguments))
+        if self.responses:
+            return self.responses.pop(0)
+        return {"success": True}
+
+
 class AgentTest(unittest.TestCase):
     def test_stops_after_failed_attach(self) -> None:
         attach = AgentAction(type=ActionType.ATTACH_PROCESS, arguments={"process": "game.exe"})
@@ -88,6 +101,39 @@ class ScanCountTest(unittest.TestCase):
         self.assertEqual(addresses, ["0x1000"])
         self.assertIsNone(total)
         self.assertFalse(_is_unique_candidate(addresses, total))
+
+
+class NumericValueTypeTest(unittest.TestCase):
+    def test_decimal_scan_infers_float_when_value_type_is_omitted(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            executor = RecordingMCPExecutor(
+                state_path=Path(temp_dir) / "state.json",
+                responses=[{"success": True, "results": [{"address": "0x1000"}], "total": 1}],
+            )
+            action = AgentAction(type=ActionType.SCAN_EXACT_VALUE, arguments={"label": "速度", "value": "12.5"})
+
+            result = executor.execute(action)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(executor.calls[0], ("scan_all", {"value": "12.5", "type": "float", "protection": "+W-C"}))
+
+    def test_write_reuses_scan_value_type_when_llm_omits_it(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            executor = RecordingMCPExecutor(
+                state_path=Path(temp_dir) / "state.json",
+                responses=[
+                    {"success": True},
+                    {"success": True, "value": 99.5},
+                ],
+            )
+            executor._remember_scan("速度", ["0x1000"], 1, "12.5", "float")
+            action = AgentAction(type=ActionType.WRITE_VALUE, arguments={"label": "速度", "value": "99.5"})
+
+            result = executor.execute(action)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(executor.calls[0], ("write_integer", {"address": "0x1000", "value": 99.5, "type": "float"}))
+        self.assertEqual(executor.calls[1], ("read_integer", {"address": "0x1000", "type": "float"}))
 
 
 if __name__ == "__main__":

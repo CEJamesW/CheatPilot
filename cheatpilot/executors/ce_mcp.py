@@ -204,8 +204,9 @@ class CheatEngineMCPExecutor:
 
     def _scan_exact_value(self, action: AgentAction) -> ActionResult:
         label = self._label_from_action(action, infer=False)[0]
-        value = str(action.arguments["value"])
-        value_type = str(action.arguments.get("value_type") or self.value_type)
+        raw_value = action.arguments["value"]
+        value = str(raw_value)
+        value_type = self._numeric_value_type(action, label, raw_value)
         self._clear_label_followups(label)
         result = self._call("scan_all", {"value": value, "type": value_type, "protection": self.protection})
         addresses = _extract_addresses(result)
@@ -301,16 +302,18 @@ class CheatEngineMCPExecutor:
         )
 
     def _write_value(self, action: AgentAction) -> ActionResult:
-        value_type = str(action.arguments.get("value_type") or self.value_type)
-        value = _coerce_numeric_value(action.arguments["value"], value_type)
         explicit_address = action.arguments.get("address")
         if explicit_address:
             label = _canonical_label(action.arguments.get("label") or "value")
             address = str(explicit_address)
+            value_type = self._numeric_value_type(action, label, action.arguments["value"])
+            value = _coerce_numeric_value(action.arguments["value"], value_type)
         else:
             label, ambiguous = self._label_from_action(action, infer=True)
             if ambiguous:
                 return self._ambiguous_label_result(action, ambiguous)
+            value_type = self._numeric_value_type(action, label, action.arguments["value"])
+            value = _coerce_numeric_value(action.arguments["value"], value_type)
             addresses, total = self._candidate_info(label)
             if not addresses:
                 self._remember_pending_write(label, value, value_type)
@@ -401,7 +404,7 @@ class CheatEngineMCPExecutor:
             if ambiguous:
                 return self._ambiguous_label_result(action, ambiguous)
         address = self._resolve_address(action, label)
-        value_type = str(action.arguments.get("value_type") or self.value_type)
+        value_type = self._numeric_value_type(action, label)
         result = self._call("read_integer", {"address": address, "type": value_type})
         return ActionResult(
             action=action,
@@ -597,7 +600,7 @@ class CheatEngineMCPExecutor:
         )
         self._save_state()
 
-    def _remember_pending_write(self, label: str, value: int, value_type: str) -> None:
+    def _remember_pending_write(self, label: str, value: int | float, value_type: str) -> None:
         label = _canonical_label(label)
         state = self._label_state(label)
         state["pending_write"] = {"value": value, "value_type": value_type}
@@ -671,6 +674,15 @@ class CheatEngineMCPExecutor:
         labels = self._state.setdefault("labels", {})
         state = labels.get(label)
         return state if isinstance(state, dict) else None
+
+    def _numeric_value_type(self, action: AgentAction, label: str, value: Any = None) -> str:
+        explicit = action.arguments.get("value_type")
+        if explicit not in (None, ""):
+            return str(explicit)
+        state = self._get_existing_label_state(label)
+        if state and state.get("value_type"):
+            return str(state["value_type"])
+        return _infer_numeric_value_type(value, self.value_type)
 
     def _label_from_action(self, action: AgentAction, default: str = "value", infer: bool = False) -> tuple[str, list[str]]:
         requested = _canonical_label(action.arguments.get("label") or default)
@@ -808,6 +820,18 @@ def _coerce_numeric_value(value: Any, value_type: str) -> int | float:
         if text.lower().startswith(("0x", "-0x", "+0x")):
             return int(text, 16)
     return int(value)
+
+
+def _infer_numeric_value_type(value: Any, default_type: str) -> str:
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text.startswith(("0x", "-0x", "+0x")):
+            return default_type
+        if "." in text or "e" in text:
+            return "float"
+    return default_type
 
 
 def _followups_ok(followup: dict[str, Any]) -> bool:
