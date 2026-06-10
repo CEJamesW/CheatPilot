@@ -10,6 +10,7 @@ from cheatpilot.models import ActionResult, ActionType, AgentAction
 LOCAL_ACTIONS = {
     ActionType.THINK,
     ActionType.LIST_FILES,
+    ActionType.LIST_PROCESSES,
     ActionType.READ_FILE,
     ActionType.WRITE_FILE,
     ActionType.RUN_COMMAND,

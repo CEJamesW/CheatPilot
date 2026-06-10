@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import shutil
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ class LocalToolExecutor:
                 return self._think(action)
             if action.type == ActionType.LIST_FILES:
                 return self._list_files(action)
+            if action.type == ActionType.LIST_PROCESSES:
+                return self._list_processes(action)
             if action.type == ActionType.READ_FILE:
                 return self._read_file(action)
             if action.type == ActionType.WRITE_FILE:
@@ -80,6 +83,89 @@ class LocalToolExecutor:
             ok=True,
             message=f"列出 {base} 下 {len(items)} 个项目。",
             data={"path": str(base), "pattern": pattern, "recursive": recursive, "items": items},
+        )
+
+    def _list_processes(self, action: AgentAction) -> ActionResult:
+        query = str(action.arguments.get("query") or "").strip().lower()
+        limit = int(action.arguments.get("limit") or 80)
+        include_command_line = bool(action.arguments.get("include_command_line", False))
+        timeout_seconds = int(action.arguments.get("timeout_seconds") or 10)
+
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        if powershell is None:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message="无法列出进程：未找到 powershell/pwsh。",
+                data={"error": "shell_unavailable", "query": query or None},
+            )
+
+        ps_command = (
+            "Get-CimInstance Win32_Process | "
+            "Select-Object ProcessId,Name,ExecutablePath,CommandLine | "
+            "ConvertTo-Json -Compress -Depth 2"
+        )
+        try:
+            completed = subprocess.run(
+                [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
+                cwd=str(self.root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"列出进程超时：{timeout_seconds} 秒。",
+                data={
+                    "error": "timeout",
+                    "query": query or None,
+                    "stdout": _decode_output(exc.stdout),
+                    "stderr": _decode_output(exc.stderr),
+                },
+            )
+
+        if completed.returncode != 0:
+            return ActionResult(
+                action=action,
+                ok=False,
+                message=f"列出进程失败，退出码 {completed.returncode}。",
+                data={"error": "process_query_failed", "stderr": completed.stderr, "query": query or None},
+            )
+
+        rows = _json_rows(completed.stdout)
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            name = str(row.get("Name") or "")
+            pid = row.get("ProcessId")
+            path = str(row.get("ExecutablePath") or "")
+            command_line = str(row.get("CommandLine") or "")
+            haystack = f"{pid} {name} {path} {command_line}".lower()
+            if query and query not in haystack:
+                continue
+            item: dict[str, Any] = {
+                "pid": pid,
+                "name": name,
+                "process": name,
+                "path": path,
+            }
+            if include_command_line:
+                item["command_line"] = command_line
+            elif command_line:
+                item["command_line_preview"] = _truncate(command_line, 300)[0]
+            items.append(item)
+            if len(items) >= limit:
+                break
+
+        suffix = f"（过滤：{query}）" if query else ""
+        return ActionResult(
+            action=action,
+            ok=True,
+            message=f"已列出 {len(items)} 个进程候选{suffix}。",
+            data={"query": query or None, "limit": limit, "processes": items, "total_seen": len(rows)},
         )
 
     def _read_file(self, action: AgentAction) -> ActionResult:
@@ -228,6 +314,17 @@ def _decode_output(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def _json_rows(value: str) -> list[dict[str, Any]]:
+    if not value.strip():
+        return []
+    parsed = json.loads(value)
+    if isinstance(parsed, dict):
+        return [parsed]
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    return []
 
 
 def _is_relative_to(path: Path, base: Path) -> bool:

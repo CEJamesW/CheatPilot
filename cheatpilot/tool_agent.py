@@ -212,10 +212,11 @@ class ToolUseChatAgent:
             "Keep labels consistent across turns. Do not switch between labels for the same value. "
             "Use list_ce_tools to inspect available raw Cheat Engine MCP tools when you are unsure which low-level MCP tool exists or what arguments it takes. "
             "Use ce_mcp_call for low-level Cheat Engine MCP inspection or one-off MCP tools when the high-level tools are not enough. "
+            "When the target process name is ambiguous or may be a window/app name rather than an executable name, use list_processes to find real process candidates before attach_process. "
             "For reset/status requests, call reset_session/session_status instead of answering from memory. "
             "For string replacement, call scan_string, write_string, then read_string when verification is useful. "
             "For explicit byte patches, call write_bytes only when the user provides an explicit address and byte sequence. "
-            "Use list_files/read_file/write_file/run_command when the user asks you to inspect or edit project files or run commands. "
+            "Use list_files/list_processes/read_file/write_file/run_command when the user asks you to inspect the local machine, edit project files, or run commands. "
             "For run_command, choose shell='powershell' for Windows commands, shell='cmd' for cmd builtins, or shell='bash' when the user explicitly asks for bash-style commands. "
             "For casual chat or help, answer normally without tools. "
             "Do not claim success unless a tool result confirms it."
@@ -309,6 +310,16 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "recursive": {"type": "boolean"},
                 "include_hidden": {"type": "boolean"},
                 "limit": {"type": "integer"},
+            },
+        ),
+        _tool(
+            "list_processes",
+            "List local process candidates by name, path, PID, or command line before attaching through Cheat Engine MCP.",
+            {
+                "query": {"type": "string"},
+                "limit": {"type": "integer"},
+                "include_command_line": {"type": "boolean"},
+                "timeout_seconds": {"type": "integer"},
             },
         ),
         _tool(

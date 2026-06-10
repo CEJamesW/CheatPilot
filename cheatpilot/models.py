@@ -26,6 +26,7 @@ class ActionType(StrEnum):
     LIST_CE_TOOLS = "list_ce_tools"
     CE_MCP_CALL = "ce_mcp_call"
     LIST_FILES = "list_files"
+    LIST_PROCESSES = "list_processes"
     READ_FILE = "read_file"
     WRITE_FILE = "write_file"
     RUN_COMMAND = "run_command"
