@@ -89,7 +89,7 @@ Copy-Item .env.example .env
 
 填写实际配置：
 
-```env
+```bash
 # 示例：https://api.openai.com/v1
 CHEATPILOT_LLM_BASE_URL=
 

@@ -89,6 +89,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Numeric scan/write safety logic now treats an address as unique only when Cheat Engine reports exactly one total match; preview `returned` counts are no longer mistaken for total matches.
 - [x] CLI now supports a persistent interactive chat mode for multi-turn scan/filter/write conversations.
 - [x] API CE backend ownership now changes only after successful CE actions, so failed attach/scan attempts do not leave a session falsely occupying the backend.
+- [x] README command/config examples now use explicit GitHub code fences such as `bash` and `powershell`.
 
 ## Live Results So Far
 
