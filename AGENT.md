@@ -92,6 +92,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] README command/config examples now use explicit GitHub code fences such as `bash` and `powershell`.
 - [x] Tool-use Agent loop depth and conversation history window are now configurable through `.env`.
 - [x] Malformed LLM Chat Completions responses now produce clear runtime errors instead of raw `KeyError`/`IndexError` crashes.
+- [x] Malformed LLM response errors now surface as user-facing Chat Completions compatibility guidance in CLI/API/UI.
 
 ## Live Results So Far
 
