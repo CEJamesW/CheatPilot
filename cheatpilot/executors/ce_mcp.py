@@ -95,36 +95,44 @@ class CheatEngineMCPExecutor:
         return ActionResult(action=action, ok=False, message=f"Unhandled action: {action.type}", data={})
 
     def _attach_process(self, action: AgentAction) -> ActionResult:
-        process = str(action.arguments.get("process") or action.arguments.get("name") or "")
-        if not process:
-            raise ValueError("attach_process requires a process argument")
-        escaped = process.replace("\\", "\\\\").replace('"', '\\"')
-        result = self._call("evaluate_lua", {"code": f'openProcess("{escaped}")\nreturn getOpenedProcessID()'})
+        pid = _optional_int(action.arguments.get("pid") or action.arguments.get("process_id"))
+        process = str(action.arguments.get("process") or action.arguments.get("name") or "").strip()
+        if pid is None and not process:
+            raise ValueError("attach_process requires a process or pid argument")
+        if pid is not None:
+            result = self._call("evaluate_lua", {"code": f"openProcess({pid})\nreturn getOpenedProcessID()"})
+        else:
+            escaped = process.replace("\\", "\\\\").replace('"', '\\"')
+            result = self._call("evaluate_lua", {"code": f'openProcess("{escaped}")\nreturn getOpenedProcessID()'})
         process_info = self._call("get_process_info", {})
-        verified = _process_matches(process, process_info)
+        verified = _process_matches(process, process_info) if pid is None else _process_id_matches(pid, process_info)
+        target = str(pid) if pid is not None else process
         if not verified:
             return ActionResult(
                 action=action,
                 ok=False,
                 message=(
-                    f"未能确认 Cheat Engine 已附加到目标进程 '{process}'。"
+                    f"未能确认 Cheat Engine 已附加到目标进程 '{target}'。"
                     "为避免在错误进程上扫描/写入，已停止本次计划。"
                 ),
                 data={
                     "process": process,
+                    "pid": pid,
                     "result": result,
                     "process_info": process_info,
                     "fatal": True,
-                    "next_step": f"请确认目标进程正在运行，并使用准确进程名，例如：打开 {process}。",
+                    "next_step": f"请确认目标进程正在运行，并使用 list_processes 找到准确进程名或 PID 后再附加。",
                 },
             )
-        self._state["process"] = process
+        self._state["process"] = process or target
+        if pid is not None:
+            self._state["pid"] = pid
         self._save_state()
         return ActionResult(
             action=action,
             ok=True,
-            message=f"已通过 Cheat Engine MCP 附加到进程 '{process}'。",
-            data={"process": process, "result": result, "process_info": process_info},
+            message=f"已通过 Cheat Engine MCP 附加到进程 '{process or target}'。",
+            data={"process": process or None, "pid": pid, "result": result, "process_info": process_info},
         )
 
     def _get_process_info(self, action: AgentAction) -> ActionResult:
@@ -890,6 +898,20 @@ def _should_reset_mcp_client(message: str) -> bool:
             "ce_mcp_bridge",
         )
     )
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _process_id_matches(expected_pid: int, process_info: Any) -> bool:
+    observed_pid = _extract_scalar_field(process_info, "process_id")
+    return _values_equal(observed_pid, expected_pid) if observed_pid is not None else False
 
 
 def _process_matches(expected: str, process_info: Any) -> bool:

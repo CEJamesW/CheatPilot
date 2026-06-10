@@ -212,7 +212,7 @@ class ToolUseChatAgent:
             "Keep labels consistent across turns. Do not switch between labels for the same value. "
             "Use list_ce_tools to inspect available raw Cheat Engine MCP tools when you are unsure which low-level MCP tool exists or what arguments it takes. "
             "Use ce_mcp_call for low-level Cheat Engine MCP inspection or one-off MCP tools when the high-level tools are not enough. "
-            "When the target process name is ambiguous or may be a window/app name rather than an executable name, use list_processes to find real process candidates before attach_process. "
+            "When the target process name is ambiguous or may be a window/app name rather than an executable name, use list_processes to find real process candidates, then attach_process with the exact process name or PID. "
             "For reset/status requests, call reset_session/session_status instead of answering from memory. "
             "For string replacement, call scan_string, write_string, then read_string when verification is useful. "
             "For explicit byte patches, call write_bytes only when the user provides an explicit address and byte sequence. "
@@ -231,7 +231,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             {"thought": {"type": "string"}, "next_action": {"type": "string"}},
             ["thought"],
         ),
-        _tool("attach_process", "Attach Cheat Engine to a process.", {"process": {"type": "string"}}, ["process"]),
+        _tool("attach_process", "Attach Cheat Engine to a process by exact process name or PID.", {"process": {"type": "string"}, "pid": {"type": "integer"}}),
         _tool("get_process_info", "Get attached process information.", {}),
         _tool("session_status", "Show saved scan session status.", {"label": {"type": "string"}}),
         _tool("reset_session", "Clear saved CheatPilot scan session.", {}),

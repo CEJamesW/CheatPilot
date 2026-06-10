@@ -56,6 +56,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Tool-use loop expanded with a `think` tool so the LLM can expose concise operational state before non-trivial actions.
 - [x] Local project tools added for the agent: `list_files`, `read_file`, `write_file`, and `run_command`.
 - [x] Local process discovery added through `list_processes`, so the LLM can resolve ambiguous app/window names to real process names or PIDs before calling Cheat Engine MCP attach.
+- [x] `attach_process` now accepts either an exact process name or a PID, letting the Agent attach by PID after `list_processes` resolves ambiguous targets.
 - [x] Composite executor added so local tools route locally while all memory operations still route to Cheat Engine MCP.
 - [x] Raw `ce_mcp_call` added for direct real Cheat Engine MCP tool calls when high-level tools are not enough.
 - [x] `list_ce_tools` added so the LLM can inspect real Cheat Engine MCP tool names and schemas before using raw `ce_mcp_call`.
