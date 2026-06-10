@@ -12,6 +12,15 @@ def response_for(action_type: ActionType, *, ok: bool) -> AgentResponse:
     )
 
 
+class RecordingExecutor:
+    def __init__(self) -> None:
+        self.actions = []
+
+    def execute(self, action: AgentAction) -> ActionResult:
+        self.actions.append(action)
+        return ActionResult(action=action, ok=True, message=f"ran {action.type.value}", data={})
+
+
 class ApiSessionOwnerTest(unittest.TestCase):
     def setUp(self) -> None:
         api._ce_session_owner = None
@@ -46,6 +55,41 @@ class ApiSessionOwnerTest(unittest.TestCase):
 
         api._update_ce_session_owner("s1", response_for(ActionType.RESET_SESSION, ok=True))
         self.assertIsNone(api._ce_session_owner)
+
+    def test_non_ce_action_is_not_blocked_by_other_session_owner(self) -> None:
+        api._ce_session_owner = "s1"
+        inner = RecordingExecutor()
+        executor = api._ApiSessionExecutor(session_id="s2", inner=inner)
+        action = AgentAction(type=ActionType.RUN_COMMAND, arguments={"command": "echo ok"})
+
+        result = executor.execute(action)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(inner.actions, [action])
+
+    def test_ce_action_is_blocked_by_other_session_owner(self) -> None:
+        api._ce_session_owner = "s1"
+        inner = RecordingExecutor()
+        executor = api._ApiSessionExecutor(session_id="s2", inner=inner)
+        action = AgentAction(type=ActionType.SCAN_EXACT_VALUE, arguments={"label": "金币", "value": 100})
+
+        result = executor.execute(action)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.data["error"], "ce_session_busy")
+        self.assertEqual(inner.actions, [])
+
+    def test_takeover_allows_ce_action_to_execute(self) -> None:
+        api._ce_session_owner = "s1"
+        inner = RecordingExecutor()
+        executor = api._ApiSessionExecutor(session_id="s2", inner=inner)
+        executor.allow_takeover = True
+        action = AgentAction(type=ActionType.SCAN_EXACT_VALUE, arguments={"label": "金币", "value": 100})
+
+        result = executor.execute(action)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(inner.actions, [action])
 
 
 if __name__ == "__main__":
