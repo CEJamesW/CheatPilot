@@ -1,7 +1,9 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from cheatpilot.agent import CheatPilotAgent
-from cheatpilot.executors.ce_mcp import _extract_total_count, _is_unique_candidate, _process_matches
+from cheatpilot.executors.ce_mcp import CheatEngineMCPExecutor, _extract_total_count, _is_unique_candidate, _process_matches
 from cheatpilot.models import ActionResult, ActionType, AgentAction, AgentPlan
 
 
@@ -75,6 +77,17 @@ class ScanCountTest(unittest.TestCase):
         self.assertFalse(_is_unique_candidate(["0x1000"], None))
         self.assertFalse(_is_unique_candidate(["0x1000"], 2))
         self.assertTrue(_is_unique_candidate(["0x1000"], 1))
+
+    def test_saved_preview_address_does_not_become_confirmed_total(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            executor = CheatEngineMCPExecutor(state_path=Path(temp_dir) / "state.json")
+            executor._remember_scan("金币", ["0x1000"], None, "150", "dword")
+
+            addresses, total = executor._candidate_info("金币")
+
+        self.assertEqual(addresses, ["0x1000"])
+        self.assertIsNone(total)
+        self.assertFalse(_is_unique_candidate(addresses, total))
 
 
 if __name__ == "__main__":

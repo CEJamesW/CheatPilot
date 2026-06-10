@@ -571,8 +571,8 @@ class CheatEngineMCPExecutor:
         state = self._label_state(label)
         addresses = self._last_scan_by_label.get(label) or list(state.get("addresses") or [])
         total = state.get("total")
-        if not isinstance(total, int):
-            total = len(addresses) if addresses else None
+        if not _state_has_known_total(state, total, len(addresses)):
+            total = None
         return addresses, total
 
     def _remember_scan(
@@ -589,7 +589,8 @@ class CheatEngineMCPExecutor:
         state.update(
             {
                 "addresses": addresses,
-                "total": total if total is not None else len(addresses),
+                "total": total,
+                "total_known": total is not None,
                 "last_value": value,
                 "value_type": value_type,
             }
@@ -1044,11 +1045,12 @@ def _merge_label_state(target: dict[str, Any], source: dict[str, Any]) -> None:
     target_total = target.get("total")
     source_wins = source_addresses and (
         not target_addresses
-        or _candidate_rank(source_total, len(source_addresses)) < _candidate_rank(target_total, len(target_addresses))
+        or _candidate_rank(source, source_total, len(source_addresses)) < _candidate_rank(target, target_total, len(target_addresses))
     )
     if source_wins:
         target["addresses"] = source_addresses
-        target["total"] = source_total if isinstance(source_total, int) else len(source_addresses)
+        target["total"] = source_total if isinstance(source_total, int) else None
+        target["total_known"] = _state_has_known_total(source, source_total, len(source_addresses))
         for key in ("last_value", "value_type", "final_address", "completed"):
             if key in source:
                 target[key] = source[key]
@@ -1061,8 +1063,18 @@ def _merge_label_state(target: dict[str, Any], source: dict[str, Any]) -> None:
             target[key] = source[key]
 
 
-def _candidate_rank(total: Any, visible_count: int) -> int:
-    return total if isinstance(total, int) else visible_count
+def _candidate_rank(state: dict[str, Any], total: Any, visible_count: int) -> tuple[int, int]:
+    if _state_has_known_total(state, total, visible_count):
+        return (0, int(total))
+    return (1, visible_count)
+
+
+def _state_has_known_total(state: dict[str, Any], total: Any, visible_count: int) -> bool:
+    if not isinstance(total, int):
+        return False
+    if state.get("total_known") is True:
+        return True
+    return total > visible_count
 
 
 def _next_step_for_candidates(label: str, total: int | None, visible_count: int) -> str | None:
