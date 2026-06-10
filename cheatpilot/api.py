@@ -48,12 +48,10 @@ def chat(request: ChatRequest) -> dict:
     agent = _get_session_agent(session_id)
     try:
         with _session_lock:
-            if request.takeover_ce_session:
-                _ce_session_owner = session_id
-            elif _ce_session_owner not in {None, session_id}:
+            if _ce_session_owner not in {None, session_id} and not request.takeover_ce_session:
                 return _ce_session_busy_response(session_id, _ce_session_owner)
             response = agent.handle(request.message)
-            _update_ce_session_owner(session_id, response)
+            _update_ce_session_owner(session_id, response, allow_takeover=request.takeover_ce_session)
     except Exception as exc:
         return {
             "ok": False,
@@ -160,12 +158,13 @@ def _ce_session_busy_response(session_id: str, owner: str) -> dict[str, Any]:
     }
 
 
-def _update_ce_session_owner(session_id: str, response: AgentResponse) -> None:
+def _update_ce_session_owner(session_id: str, response: AgentResponse, *, allow_takeover: bool = False) -> None:
     global _ce_session_owner
-    for action in response.plan.actions:
-        if action.type == ActionType.RESET_SESSION and _ce_session_owner == session_id:
+    for result in response.results:
+        action = result.action
+        if action.type == ActionType.RESET_SESSION and result.ok and _ce_session_owner == session_id:
             _ce_session_owner = None
-        elif action.type in _CE_SESSION_ACTIONS and _ce_session_owner is None:
+        elif action.type in _CE_SESSION_ACTIONS and result.ok and (_ce_session_owner in {None, session_id} or allow_takeover):
             _ce_session_owner = session_id
 
 

@@ -88,6 +88,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Tool-use agent now accepts both standard `tool_calls` and legacy OpenAI-compatible `function_call` responses.
 - [x] Numeric scan/write safety logic now treats an address as unique only when Cheat Engine reports exactly one total match; preview `returned` counts are no longer mistaken for total matches.
 - [x] CLI now supports a persistent interactive chat mode for multi-turn scan/filter/write conversations.
+- [x] API CE backend ownership now changes only after successful CE actions, so failed attach/scan attempts do not leave a session falsely occupying the backend.
 
 ## Live Results So Far
 
