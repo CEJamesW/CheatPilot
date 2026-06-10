@@ -187,27 +187,6 @@ def _ce_session_busy_action_result(action: AgentAction, session_id: str, owner: 
     )
 
 
-def _ce_session_busy_response(session_id: str, owner: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "reply": (
-            f"CE MCP 后端当前由 session `{owner}` 占用。"
-            "为避免不同会话覆盖同一个 Cheat Engine 附加进程或扫描池，本次请求未执行。"
-            "请使用当前占用会话继续，或在请求中设置 takeover_ce_session=true 接管。"
-        ),
-        "session_id": session_id,
-        "ce_session_owner": owner,
-        "plan": {},
-        "results": [
-            {
-                "ok": False,
-                "message": "CE MCP backend is owned by another API session.",
-                "data": {"error": "ce_session_busy", "owner": owner},
-            }
-        ],
-    }
-
-
 def _update_ce_session_owner(session_id: str, response: AgentResponse, *, allow_takeover: bool = False) -> None:
     global _ce_session_owner
     for result in response.results:
