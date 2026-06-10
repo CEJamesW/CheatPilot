@@ -1,7 +1,7 @@
 import unittest
 
 from cheatpilot.agent import CheatPilotAgent
-from cheatpilot.executors.ce_mcp import _process_matches
+from cheatpilot.executors.ce_mcp import _extract_total_count, _is_unique_candidate, _process_matches
 from cheatpilot.models import ActionResult, ActionType, AgentAction, AgentPlan
 
 
@@ -53,6 +53,28 @@ class ProcessMatchTest(unittest.TestCase):
                 {"process_name": "PlantsVsZombies.exe", "modules": [{"name": "PlantsVsZombies.exe"}]},
             )
         )
+
+
+class ScanCountTest(unittest.TestCase):
+    def test_returned_count_is_not_treated_as_total(self) -> None:
+        result = {"success": True, "results": [{"address": "0x1000"}], "returned": 1}
+
+        self.assertIsNone(_extract_total_count(result))
+
+    def test_total_preferred_over_returned(self) -> None:
+        result = {"success": True, "results": [{"address": "0x1000"}], "total": 25, "returned": 1}
+
+        self.assertEqual(_extract_total_count(result), 25)
+
+    def test_plain_scan_count_is_total(self) -> None:
+        result = {"success": True, "count": 1}
+
+        self.assertEqual(_extract_total_count(result), 1)
+
+    def test_unique_candidate_requires_known_total(self) -> None:
+        self.assertFalse(_is_unique_candidate(["0x1000"], None))
+        self.assertFalse(_is_unique_candidate(["0x1000"], 2))
+        self.assertTrue(_is_unique_candidate(["0x1000"], 1))
 
 
 if __name__ == "__main__":

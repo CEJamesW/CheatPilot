@@ -86,6 +86,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Runtime API session state and generated Python caches are ignored by git.
 - [x] Cheat Engine bridge error guidance now prints the current project's runtime bridge path instead of a machine-specific path.
 - [x] Tool-use agent now accepts both standard `tool_calls` and legacy OpenAI-compatible `function_call` responses.
+- [x] Numeric scan/write safety logic now treats an address as unique only when Cheat Engine reports exactly one total match; preview `returned` counts are no longer mistaken for total matches.
 
 ## Live Results So Far
 

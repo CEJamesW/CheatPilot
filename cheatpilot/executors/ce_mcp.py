@@ -175,7 +175,7 @@ class CheatEngineMCPExecutor:
                 message += f" 待写入 {pending_write.get('value')}。"
             if pending_base:
                 message += " 待打印基址。"
-            if len(addresses) != 1 or total != 1:
+            if not _is_unique_candidate(addresses, total):
                 message += f" 下一步：让 {label} 在目标进程里再变化一次，然后告诉我新的数值。"
         elif labels:
             message = f"当前保存了 {len(labels)} 个标签的扫描会话，{pending_count} 个有待执行后续动作。"
@@ -326,7 +326,7 @@ class CheatEngineMCPExecutor:
                         "next_step": f"告诉我当前{label}是多少，例如：现在{label}是100。",
                     },
                 )
-            if len(addresses) != 1 or (total is not None and total != 1):
+            if not _is_unique_candidate(addresses, total):
                 self._remember_pending_write(label, value, value_type)
                 return ActionResult(
                     action=action,
@@ -373,7 +373,7 @@ class CheatEngineMCPExecutor:
         if ambiguous:
             return self._ambiguous_label_result(action, ambiguous)
         addresses, total = self._candidate_info(label)
-        address = addresses[0] if len(addresses) == 1 and (total in {None, 1}) else None
+        address = addresses[0] if _is_unique_candidate(addresses, total) else None
         if not address:
             self._remember_pending_base(label)
         return ActionResult(
@@ -559,7 +559,7 @@ class CheatEngineMCPExecutor:
             return str(explicit)
         addresses, total = self._candidate_info(label)
         if addresses:
-            if required and (len(addresses) != 1 or (total is not None and total != 1)):
+            if required and not _is_unique_candidate(addresses, total):
                 raise ValueError(f"{label} has {len(addresses)} visible candidates and {total} total; narrow with next_scan first")
             return addresses[0]
         if required:
@@ -621,7 +621,7 @@ class CheatEngineMCPExecutor:
 
     def _run_pending_followups(self, label: str, addresses: list[str], total: int | None) -> dict[str, Any]:
         label = _canonical_label(label)
-        if len(addresses) != 1 or (total is not None and total != 1):
+        if not _is_unique_candidate(addresses, total):
             return {}
 
         state = self._label_state(label)
@@ -814,6 +814,10 @@ def _followups_ok(followup: dict[str, Any]) -> bool:
     return not isinstance(write, dict) or bool(write.get("ok"))
 
 
+def _is_unique_candidate(addresses: list[str], total: int | None) -> bool:
+    return len(addresses) == 1 and total == 1
+
+
 def _write_error_message(write_result: Any, readback: Any, expected: Any) -> str:
     if _is_error_result(write_result):
         return str(write_result.get("error") or "write_integer failed")
@@ -864,8 +868,12 @@ def _brief_result(prefix: str, result: Any) -> str:
 
 def _extract_total_count(result: Any) -> int | None:
     if isinstance(result, dict):
-        for key in ("total", "count", "returned"):
+        for key in ("total", "total_count", "match_count", "matches", "found_count"):
             value = result.get(key)
+            if isinstance(value, int):
+                return value
+        if "count" in result and "returned" not in result:
+            value = result.get("count")
             if isinstance(value, int):
                 return value
         for value in result.values():
@@ -1060,7 +1068,7 @@ def _candidate_rank(total: Any, visible_count: int) -> int:
 def _next_step_for_candidates(label: str, total: int | None, visible_count: int) -> str | None:
     if visible_count == 0 and not total:
         return f"没有找到 {label} 候选。请确认 Cheat Engine 已附加到正确进程，并重新告诉我当前{label}值。"
-    if visible_count == 1 and (total in {None, 1}):
+    if visible_count == 1 and total == 1:
         return None
     return f"请在目标程序里让{label}变化一次，然后告诉我新的{label}数值，例如：现在{label}是50了。"
 
