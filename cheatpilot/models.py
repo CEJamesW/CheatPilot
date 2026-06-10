@@ -23,6 +23,7 @@ class ActionType(StrEnum):
     WRITE_BYTES = "write_bytes"
     WRITE_STRING = "write_string"
     EVALUATE_LUA = "evaluate_lua"
+    LIST_CE_TOOLS = "list_ce_tools"
     CE_MCP_CALL = "ce_mcp_call"
     LIST_FILES = "list_files"
     READ_FILE = "read_file"

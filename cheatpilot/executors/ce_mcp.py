@@ -79,6 +79,8 @@ class CheatEngineMCPExecutor:
             return self._write_string(action)
         if action.type == ActionType.EVALUATE_LUA:
             return self._evaluate_lua(action)
+        if action.type == ActionType.LIST_CE_TOOLS:
+            return self._list_ce_tools(action)
         if action.type == ActionType.CE_MCP_CALL:
             return self._ce_mcp_call(action)
         if action.type == ActionType.EXPLAIN:
@@ -500,6 +502,31 @@ class CheatEngineMCPExecutor:
             ok=not _is_error_result(result),
             message="Executed Lua through Cheat Engine MCP.",
             data={"raw": result},
+        )
+
+    def _list_ce_tools(self, action: AgentAction) -> ActionResult:
+        tools = self._get_client().list_tools()
+        limit = int(action.arguments.get("limit") or 80)
+        query = str(action.arguments.get("query") or "").strip().lower()
+        items: list[dict[str, Any]] = []
+        for tool in tools:
+            haystack = f"{tool.name} {tool.description}".lower()
+            if query and query not in haystack:
+                continue
+            items.append(
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "input_schema": tool.input_schema,
+                }
+            )
+            if len(items) >= limit:
+                break
+        return ActionResult(
+            action=action,
+            ok=True,
+            message=f"已列出 {len(items)} 个 Cheat Engine MCP 工具。",
+            data={"query": query or None, "tools": items, "total_available": len(tools)},
         )
 
     def _ce_mcp_call(self, action: AgentAction) -> ActionResult:

@@ -210,6 +210,7 @@ class ToolUseChatAgent:
             "If scan observations show multiple candidates, ask the user to change that same value in the target process and report the new value; after they report it, use next_scan. "
             "If exactly one active scan session exists and the user reports only a number, continue that session with next_scan. "
             "Keep labels consistent across turns. Do not switch between labels for the same value. "
+            "Use list_ce_tools to inspect available raw Cheat Engine MCP tools when you are unsure which low-level MCP tool exists or what arguments it takes. "
             "Use ce_mcp_call for low-level Cheat Engine MCP inspection or one-off MCP tools when the high-level tools are not enough. "
             "For reset/status requests, call reset_session/session_status instead of answering from memory. "
             "For string replacement, call scan_string, write_string, then read_string when verification is useful. "
@@ -287,6 +288,11 @@ def tool_schemas() -> list[dict[str, Any]]:
             "Execute benign Cheat Engine Lua automation if enabled by configuration.",
             {"code": {"type": "string"}},
             ["code"],
+        ),
+        _tool(
+            "list_ce_tools",
+            "List available raw Cheat Engine MCP tools and their input schemas. Use this before ce_mcp_call when unsure.",
+            {"query": {"type": "string"}, "limit": {"type": "integer"}},
         ),
         _tool(
             "ce_mcp_call",

@@ -57,6 +57,7 @@ The agent should attach to a real process through Cheat Engine MCP, scan the cur
 - [x] Local project tools added for the agent: `list_files`, `read_file`, `write_file`, and `run_command`.
 - [x] Composite executor added so local tools route locally while all memory operations still route to Cheat Engine MCP.
 - [x] Raw `ce_mcp_call` added for direct real Cheat Engine MCP tool calls when high-level tools are not enough.
+- [x] `list_ce_tools` added so the LLM can inspect real Cheat Engine MCP tool names and schemas before using raw `ce_mcp_call`.
 - [x] LLM prompt revised toward an observe-think-act agent loop instead of a fixed workflow.
 - [x] Scan label continuity improved for generic value labels and omitted-label follow-up turns.
 - [x] README restyled to match the requested concise Chinese project style while preserving the existing information.
@@ -93,7 +94,7 @@ CheatPilot is now a tool-use agent loop rather than a fixed scripted workflow:
 2. The LLM uses `think` for concise operational state when the task is non-trivial.
 3. The LLM asks the user for missing facts such as the current visible value instead of guessing.
 4. High-level memory tools execute through real Cheat Engine MCP and preserve scan session state.
-5. Raw `ce_mcp_call` can call real Cheat Engine MCP tools for low-level inspection when needed.
+5. `list_ce_tools` can inspect real Cheat Engine MCP tool schemas, and raw `ce_mcp_call` can call those tools for low-level inspection when needed.
 6. Local tools let the agent inspect project files or run commands without leaving the same tool loop.
 
 For ordinary numeric memory changes, the expected agent behavior is:
